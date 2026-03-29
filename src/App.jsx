@@ -42,6 +42,7 @@ const TH = {
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
 const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbyMB4bszOO2u4NJ1P5GIaPxSJX0XcI5UK2nXW9Fl71xr8W2TzXh0rAWTvecdp_6J7CH/exec";
 
+const _pings = [];
 function logSubmission(result, solveTimeSec, queryCount) {
   if (!ANALYTICS_URL) return;
   try {
@@ -50,27 +51,36 @@ function logSubmission(result, solveTimeSec, queryCount) {
     const timeStr = solveTimeSec != null
       ? `${Math.floor(solveTimeSec/60)}:${String(solveTimeSec%60).padStart(2,"0")}`
       : "";
-    const params = new URLSearchParams({
+    const data = {
       result,
       solveTime: timeStr,
-      queries: queryCount,
+      queries: String(queryCount),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
       locale: nav.language || "",
-      browser: nav.userAgent || "",
+      browser: (nav.userAgent || "").slice(0, 200),
       screen: `${screen.width}x${screen.height}`,
       os: nav.platform || nav.userAgentData?.platform || "",
       viewport: `${window.innerWidth}x${window.innerHeight}`,
-      referrer: document.referrer || "",
-      cores: nav.hardwareConcurrency || "",
-      memory: nav.deviceMemory || "",
+      referrer: (document.referrer || "").slice(0, 100),
+      cores: String(nav.hardwareConcurrency || ""),
+      memory: String(nav.deviceMemory || ""),
       touch: "ontouchstart" in window || nav.maxTouchPoints > 0 ? "yes" : "no",
-      dpr: window.devicePixelRatio || "",
-      depth: screen.colorDepth || "",
+      dpr: String(window.devicePixelRatio || ""),
+      depth: String(screen.colorDepth || ""),
       dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
       connection: conn.effectiveType || "",
-      dnt: nav.doNotTrack || ""
+      dnt: nav.doNotTrack || "",
+      platform: IS_MOBILE ? "mobile" : "desktop"
+    };
+    const url = `${ANALYTICS_URL}?${new URLSearchParams(data)}`;
+    // fetch GET follows redirects on all browsers including mobile Safari
+    fetch(url, { mode: "no-cors" }).catch(() => {
+      // Fallback: Image pixel (keep reference to prevent GC)
+      const img = new Image();
+      _pings.push(img);
+      img.onload = img.onerror = () => { const i = _pings.indexOf(img); if (i >= 0) _pings.splice(i, 1); };
+      img.src = url;
     });
-    new Image().src = `${ANALYTICS_URL}?${params}`;
   } catch (e) { /* silent */ }
 }
 
