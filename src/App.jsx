@@ -139,9 +139,7 @@ const MOBILE_SHAPE_BANK = [
   { name:"Sm para", cells:[[0,0,"/b"],[0,1,"/"]] },
   { name:"Sm para", cells:[[0,0,"\\b"],[0,1,"\\"]] },
   { name:"Tall dia", cells:[[0,0,"/b"],[1,0,"\\"]] },
-  { name:"L shape", cells:[[0,0,"\\f"],[1,0,"/b"],[1,1,"\\b"]] },
   { name:"Arrow", cells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]] },
-  { name:"Wedge", cells:[[0,0,"\\b"],[0,1,"/b"],[1,1,"\\f"]] },
   { name:"Stripe", cells:[[0,0,"/f"],[0,1,"/f"]] },
 ];
 
