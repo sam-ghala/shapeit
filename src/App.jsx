@@ -564,6 +564,7 @@ export default function ShapeIt(){
     const shuffled=[...result.colors].sort(()=>Math.random()-0.5);
     setHistory(prev=>[...prev,{entry:getLabel(side,idx),exit:getLabel(result.exitSide,result.exitIdx),
       colors:shuffled}]);
+    if(shuffled.length>0)setSelColor(shuffled[0]);
     setActiveLabels({entry:entryKey,exit:exitKey});
     setUsedLabels(prev=>{const next=new Set(prev);next.add(entryKey);next.add(exitKey);return next;});
     setTimeout(()=>{setActiveLabels(null);},1800);
