@@ -26,6 +26,46 @@ const TH = {
   infoBg: "rgba(30,136,229,0.10)"
 };
 
+// PASTE YOUR GOOGLE APPS SCRIPT URL HERE
+const ANALYTICS_URL = "";
+
+function logSubmission(result, solveTimeSec, queryCount) {
+  if (!ANALYTICS_URL) return;
+  try {
+    const nav = navigator || {};
+    const conn = nav.connection || nav.mozConnection || nav.webkitConnection || {};
+    const timeStr = solveTimeSec != null
+      ? `${Math.floor(solveTimeSec/60)}:${String(solveTimeSec%60).padStart(2,"0")}`
+      : "";
+    const payload = {
+      result,
+      solveTime: timeStr,
+      queries: queryCount,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      locale: nav.language || "",
+      browser: nav.userAgent || "",
+      screen: `${screen.width}x${screen.height}`,
+      os: nav.platform || nav.userAgentData?.platform || "",
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      referrer: document.referrer || "",
+      cores: nav.hardwareConcurrency || "",
+      memory: nav.deviceMemory || "",
+      touch: "ontouchstart" in window || nav.maxTouchPoints > 0 ? "yes" : "no",
+      dpr: window.devicePixelRatio || "",
+      depth: screen.colorDepth || "",
+      dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
+      connection: conn.effectiveType || "",
+      dnt: nav.doNotTrack || ""
+    };
+    fetch(ANALYTICS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  } catch (e) { /* silent */ }
+}
+
 const ROTATE_MAP = {
   "/": "\\", "\\": "/b", "/b": "\\b", "\\b": "/",
   "/f": "\\f", "\\f": "/f"
@@ -608,11 +648,16 @@ export default function ShapeIt(){
       for(const ek of outEdges){if(edgeColors[ek]!==color){allCorrect=false;break;}}
       if(!allCorrect)break;
     }
+    const elapsed=Math.floor((Date.now()-startTime)/1000);
     if(allCorrect){
-      setSolveTime(Math.floor((Date.now()-startTime)/1000));
+      setSolveTime(elapsed);
       setSubmitResult("correct");setCelebrating(true);
-    }else{setSubmitResult("incorrect");setGameOver(true);}
-  },[guess,edgeColors,puzzle,gameOver,celebrating,startTime]);
+      logSubmission("correct",elapsed,history.length);
+    }else{
+      setSubmitResult("incorrect");setGameOver(true);
+      logSubmission("incorrect",elapsed,history.length);
+    }
+  },[guess,edgeColors,puzzle,gameOver,celebrating,startTime,history.length]);
 
   const gx=(c)=>M+c*CS;const gy=(r)=>M+r*CS;
 
