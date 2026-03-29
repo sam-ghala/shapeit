@@ -368,15 +368,31 @@ export default function ShapeIt(){
     });
   },[selColor,gameOver,celebrating]);
 
+  const labelToKey=useMemo(()=>{
+    const m={};
+    TOP_L.forEach((l,i)=>{m[l]=`top-${i}`;});
+    BOT_L.forEach((l,i)=>{m[l]=`bottom-${i}`;});
+    LEFT_L.forEach((l,i)=>{m[l]=`left-${i}`;});
+    RIGHT_L.forEach((l,i)=>{m[l]=`right-${i}`;});
+    return m;
+  },[]);
+
   const handleLabelClick=useCallback((side,idx)=>{
     if(gameOver||celebrating)return;
     const entryKey=`${side}-${idx}`;const label=getLabel(side,idx);
     if(usedLabels.has(entryKey)){
       const matchIndices=[];
-      history.forEach((h,i)=>{if(h.entry===label||h.exit===label)matchIndices.push(i);});
+      const highlightKeys=new Set();
+      history.forEach((h,i)=>{
+        if(h.entry===label||h.exit===label){
+          matchIndices.push(i);
+          if(labelToKey[h.entry])highlightKeys.add(labelToKey[h.entry]);
+          if(labelToKey[h.exit])highlightKeys.add(labelToKey[h.exit]);
+        }
+      });
       if(matchIndices.length>0){
         setHighlightRow(matchIndices);
-        setActiveLabels({entry:entryKey,exit:entryKey});
+        setActiveLabels({keys:highlightKeys});
         setTimeout(()=>{setHighlightRow(null);setActiveLabels(null);},2000);
       }
       return;
@@ -436,7 +452,6 @@ export default function ShapeIt(){
     if(allCorrect){
       setSolveTime(Math.floor((Date.now()-startTime)/1000));
       setSubmitResult("correct");setCelebrating(true);
-      setTimeout(()=>setCelebrating(false),6000);
     }else{setSubmitResult("incorrect");setGameOver(true);}
   },[guess,edgeColors,puzzle,gameOver,celebrating,startTime]);
 
@@ -541,8 +556,8 @@ export default function ShapeIt(){
       {/* Labels */}
       {Array.from({length:COLS},(_,i)=>{
         const tK=`top-${i}`,bK=`bottom-${i}`;
-        const tA=activeLabels&&(activeLabels.entry===tK||activeLabels.exit===tK);
-        const bA=activeLabels&&(activeLabels.entry===bK||activeLabels.exit===bK);
+        const tA=activeLabels&&(activeLabels.entry===tK||activeLabels.exit===tK||(activeLabels.keys&&activeLabels.keys.has(tK)));
+        const bA=activeLabels&&(activeLabels.entry===bK||activeLabels.exit===bK||(activeLabels.keys&&activeLabels.keys.has(bK)));
         const tU=usedLabels.has(tK),bU=usedLabels.has(bK);
         const tF=tA?"#1E88E5":tU?"#c8c8c8":TH.textSecondary;
         const bF=bA?"#1E88E5":bU?"#c8c8c8":TH.textSecondary;
@@ -563,8 +578,8 @@ export default function ShapeIt(){
       })}
       {Array.from({length:ROWS},(_,i)=>{
         const lK=`left-${i}`,rK=`right-${i}`;
-        const lA=activeLabels&&(activeLabels.entry===lK||activeLabels.exit===lK);
-        const rA=activeLabels&&(activeLabels.entry===rK||activeLabels.exit===rK);
+        const lA=activeLabels&&(activeLabels.entry===lK||activeLabels.exit===lK||(activeLabels.keys&&activeLabels.keys.has(lK)));
+        const rA=activeLabels&&(activeLabels.entry===rK||activeLabels.exit===rK||(activeLabels.keys&&activeLabels.keys.has(rK)));
         const lU=usedLabels.has(lK),rU=usedLabels.has(rK);
         const lF=lA?"#1E88E5":lU?"#c8c8c8":TH.textSecondary;
         const rF=rA?"#1E88E5":rU?"#c8c8c8":TH.textSecondary;
@@ -783,6 +798,14 @@ export default function ShapeIt(){
         solveTime={solveTime}onClose={()=>{setCelebrating(false);setOverlayDismissed(true);}}/>}
       {gameOver&&!overlayDismissed&&<GameOverOverlay queries={history.length}
         onNewPuzzle={handleNewPuzzle}onClose={()=>setOverlayDismissed(true)}/>}
+
+      {/* Footer */}
+      <div style={{textAlign:"center",padding:"24px 16px 16px",fontSize:12,color:TH.textTertiary}}>
+        Authors: <a href="https://robinerb.github.io"style={{color:TH.textSecondary,textDecoration:"none",
+          borderBottom:`1px solid ${TH.borderLight}`}}target="_blank"rel="noopener noreferrer">Robin Erb</a> & <a
+          href="https://samghalayini.com"style={{color:TH.textSecondary,textDecoration:"none",
+          borderBottom:`1px solid ${TH.borderLight}`}}target="_blank"rel="noopener noreferrer">Sam Ghalayini</a>
+      </div>
     </div>
   );
 }
@@ -812,7 +835,7 @@ function CelebrationOverlay({queries,solveTime,onClose}){
       display:"flex",alignItems:"center",justifyContent:"center"}}>
       {particles.map(p=>{
         const s={position:"absolute",left:`${p.left}%`,top:0,width:p.size,height:p.size,opacity:0,
-          animation:`sf ${p.duration}s ${p.delay}s ease-out forwards`,"--d":`${p.drift}px`,"--s":`${p.spinDir*p.spinAmount}deg`};
+          animation:`sf ${p.duration}s ${p.delay}s ease-out infinite`,"--d":`${p.drift}px`,"--s":`${p.spinDir*p.spinAmount}deg`};
         return(<div key={p.id}style={s}><svg width={p.size}height={p.size}viewBox="0 0 24 24">
           {p.type==="triangle"&&<polygon points="12,2 22,22 2,22"fill={p.color}opacity={0.85}/>}
           {p.type==="diamond"&&<polygon points="12,1 23,12 12,23 1,12"fill={p.color}opacity={0.85}/>}
@@ -835,7 +858,7 @@ function CelebrationOverlay({queries,solveTime,onClose}){
           with {queries} {queries===1?"query":"queries"}
         </div>
         <button onClick={()=>{
-          const text=`ShapeIt 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
+          const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
           if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});}
         }}style={{marginTop:16,padding:"10px 28px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
           background:copied?"#4CAF50":"#1E88E5",color:"#fff",border:"none",transition:"background 0.2s"}}>
@@ -866,7 +889,7 @@ function GameOverOverlay({queries,onNewPuzzle,onClose}){
       display:"flex",alignItems:"center",justifyContent:"center"}}>
       {particles.map(p=>{
         const s={position:"absolute",left:`${p.left}%`,top:0,width:p.size,height:p.size,opacity:0,
-          animation:`sfg ${p.duration}s ${p.delay}s ease-out forwards`,"--d":`${p.drift}px`,"--s":`${p.spinDir*p.spinAmount}deg`};
+          animation:`sfg ${p.duration}s ${p.delay}s ease-out infinite`,"--d":`${p.drift}px`,"--s":`${p.spinDir*p.spinAmount}deg`};
         return(<div key={p.id}style={s}><svg width={p.size}height={p.size}viewBox="0 0 24 24">
           {p.type==="triangle"&&<polygon points="12,2 22,22 2,22"fill={p.color}opacity={0.5}/>}
           {p.type==="diamond"&&<polygon points="12,1 23,12 12,23 1,12"fill={p.color}opacity={0.5}/>}
