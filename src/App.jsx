@@ -232,39 +232,47 @@ function getLabel(side,idx){
 }
 
 function generatePuzzle(seed){
+  for(let retry=0;retry<50;retry++){
+    const rng=mulberry32(hashSeed(seed+"-"+retry));
+    const board=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+    const placed=[];const order=[...PIECES].sort(()=>rng()-0.5);
+    let allPlaced=true;
+    for(const piece of order){
+      let ok=false;
+      for(let att=0;att<1000&&!ok;att++){
+        const rot=Math.floor(rng()*4);
+        const cells=rotateCells(piece.cells,rot);
+        const rs=cells.map(c=>c[0]),cs=cells.map(c=>c[1]);
+        const minR=Math.min(...rs),maxR=Math.max(...rs);
+        const minC=Math.min(...cs),maxC=Math.max(...cs);
+        const spanR=maxR-minR,spanC=maxC-minC;
+        if(spanR>=ROWS||spanC>=COLS)continue;
+        const sR=Math.floor(rng()*(ROWS-spanR));
+        const sC=Math.floor(rng()*(COLS-spanC));
+        const abs=cells.map(([dr,dc,t])=>[dr-minR+sR,dc-minC+sC,t]);
+        let valid=true;
+        for(const[ar,ac]of abs){if(ar<0||ar>=ROWS||ac<0||ac>=COLS||board[ar][ac]!==null){valid=false;break;}}
+        if(!valid)continue;
+        for(const[ar,ac]of abs){
+          for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){
+            const nr=ar+dr,nc=ac+dc;
+            if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]!==null){
+              if(!abs.some(([a,b])=>a===nr&&b===nc)){valid=false;break;}
+            }
+          }if(!valid)break;
+        }
+        if(!valid)continue;
+        for(const[ar,ac,t]of abs) board[ar][ac]={color:piece.color,type:t};
+        placed.push({...piece,rotation:rot,absCells:abs});ok=true;
+      }
+      if(!ok){allPlaced=false;break;}
+    }
+    if(allPlaced) return{board,placed};
+  }
+  // Last resort fallback (should never reach here)
   const rng=mulberry32(hashSeed(seed));
   const board=Array.from({length:ROWS},()=>Array(COLS).fill(null));
-  const placed=[];const order=[...PIECES].sort(()=>rng()-0.5);
-  for(const piece of order){
-    let ok=false;
-    for(let att=0;att<1000&&!ok;att++){
-      const rot=Math.floor(rng()*4);
-      const cells=rotateCells(piece.cells,rot);
-      const rs=cells.map(c=>c[0]),cs=cells.map(c=>c[1]);
-      const minR=Math.min(...rs),maxR=Math.max(...rs);
-      const minC=Math.min(...cs),maxC=Math.max(...cs);
-      const spanR=maxR-minR,spanC=maxC-minC;
-      if(spanR>=ROWS||spanC>=COLS)continue;
-      const sR=Math.floor(rng()*(ROWS-spanR));
-      const sC=Math.floor(rng()*(COLS-spanC));
-      const abs=cells.map(([dr,dc,t])=>[dr-minR+sR,dc-minC+sC,t]);
-      let valid=true;
-      for(const[ar,ac]of abs){if(ar<0||ar>=ROWS||ac<0||ac>=COLS||board[ar][ac]!==null){valid=false;break;}}
-      if(!valid)continue;
-      for(const[ar,ac]of abs){
-        for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){
-          const nr=ar+dr,nc=ac+dc;
-          if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]!==null){
-            if(!abs.some(([a,b])=>a===nr&&b===nc)){valid=false;break;}
-          }
-        }if(!valid)break;
-      }
-      if(!valid)continue;
-      for(const[ar,ac,t]of abs) board[ar][ac]={color:piece.color,type:t};
-      placed.push({...piece,rotation:rot,absCells:abs});ok=true;
-    }
-  }
-  return{board,placed};
+  return{board,placed:[]};
 }
 
 function findMatch(guessBoard,edgeColors,piece){
