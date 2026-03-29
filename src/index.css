@@ -9,39 +9,45 @@ body {
   color: #212121;
 }
 
+/* Mobile-only bottom panel hidden on desktop */
+.panel-mobile-bottom {
+  display: none !important;
+}
+
 @media (max-width: 860px) {
   .game-layout {
     flex-direction: column !important;
     align-items: center !important;
     padding: 0 8px 20px !important;
-    gap: 16px !important;
+    gap: 12px !important;
   }
 
   .header-bar {
-    padding: 12px 16px !important;
+    padding: 10px 16px !important;
   }
 
+  /* Order: board(1), colors(2), log(3), mobile-bottom with pieces+buttons(4) */
   .panel-board { order: 1; width: 100%; }
   .panel-board svg { margin: 0 auto; }
 
-  .panel-pieces {
+  .panel-controls {
     order: 2;
     width: 100% !important;
     max-width: 600px;
   }
 
-  .panel-controls {
+  .panel-log {
     order: 3;
     width: 100% !important;
     max-width: 600px;
   }
 
-  .panel-log {
+  .panel-mobile-bottom {
+    display: flex !important;
     order: 4;
-    width: 100% !important;
-    max-width: 600px;
   }
 
+  /* Hide desktop-only pieces and buttons inside panel-controls */
   .hide-mobile {
     display: none !important;
   }

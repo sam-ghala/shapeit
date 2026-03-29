@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 
 const COLS = 10, ROWS = 8, CS = 52, M = 40;
 const GW = COLS * CS, GH = ROWS * CS;
@@ -597,11 +597,22 @@ export default function ShapeIt(){
     </svg>
   );
 
+  const logRef=useRef(null);
+  const isMobile=typeof window!=="undefined"&&window.innerWidth<=860;
+
+  useEffect(()=>{
+    if(logRef.current&&!isMobile){
+      logRef.current.scrollTop=logRef.current.scrollHeight;
+    }
+  },[history.length,isMobile]);
+
+  const displayHistory=isMobile?[...history].reverse():history;
+
   const queryLog=(
     <div>
       <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:10,
         textTransform:"uppercase",letterSpacing:"0.08em"}}>Query log</div>
-      <div style={{maxHeight:420,overflowY:"auto"}}>
+      <div ref={logRef}style={{maxHeight:420,overflowY:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
           <thead>
             <tr style={{borderBottom:`2px solid ${TH.gridLine}`}}>
@@ -616,12 +627,13 @@ export default function ShapeIt(){
                 Click a label to fire
               </td></tr>
             )}
-            {history.map((h,i)=>{
-              const isHL=highlightRow&&highlightRow.includes(i);
+            {displayHistory.map((h,di)=>{
+              const origIdx=isMobile?history.length-1-di:di;
+              const isHL=highlightRow&&highlightRow.includes(origIdx);
               return(
-              <tr key={i}style={{borderBottom:`1px solid ${TH.borderLight}`,
+              <tr key={origIdx}style={{borderBottom:`1px solid ${TH.borderLight}`,
                 background:isHL?"rgba(30,136,229,0.12)":"transparent",transition:"background 0.2s"}}>
-                <td style={{padding:"7px 6px",color:TH.textTertiary,fontSize:12}}>{i+1}</td>
+                <td style={{padding:"7px 6px",color:TH.textTertiary,fontSize:12}}>{origIdx+1}</td>
                 <td style={{padding:"7px 6px",fontWeight:600}}>{h.entry}</td>
                 <td style={{padding:"7px 6px",fontWeight:600}}>{h.exit}</td>
                 <td style={{padding:"7px 6px"}}>
@@ -648,15 +660,19 @@ export default function ShapeIt(){
     <div style={{fontFamily:"system-ui,-apple-system,sans-serif",color:TH.textPrimary,
       background:TH.bg,minHeight:"100vh"}}>
 
-      {/* New puzzle flash */}
-      {newFlash&&<div style={{position:"fixed",inset:0,zIndex:9998,background:"white",
-        display:"flex",alignItems:"center",justifyContent:"center",
-        animation:"flashIn 0.4s ease-out forwards"}}>
-        <style>{`@keyframes flashIn{0%{opacity:1}70%{opacity:1}100%{opacity:0}}`}</style>
-        <div style={{fontSize:28,fontWeight:700,color:TH.textTertiary}}>New puzzle...</div>
+      {/* New puzzle popup */}
+      {newFlash&&<div style={{position:"fixed",inset:0,zIndex:9998,background:"rgba(0,0,0,0.3)",
+        display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <style>{`@keyframes flashPop{0%{transform:scale(.8);opacity:0}30%{transform:scale(1.02);opacity:1}100%{transform:scale(1);opacity:1}}`}</style>
+        <div style={{background:"white",borderRadius:16,padding:"28px 32px",maxWidth:"calc(100vw - 32px)",
+          width:340,boxShadow:"0 8px 40px rgba(0,0,0,.15)",textAlign:"center",
+          animation:"flashPop 0.35s ease-out forwards"}}>
+          <div style={{fontSize:22,fontWeight:700,color:TH.textPrimary,marginBottom:6}}>New puzzle</div>
+          <div style={{fontSize:14,color:TH.textTertiary}}>Loading...</div>
+        </div>
       </div>}
 
-      {/* Header — always on top */}
+      {/* Header */}
       <div className="header-bar"style={{display:"flex",justifyContent:"space-between",alignItems:"center",
         padding:"16px 24px",maxWidth:1100,margin:"0 auto"}}>
         <span style={{fontSize:22,fontWeight:700}}>ShapeIt</span>
@@ -672,7 +688,7 @@ export default function ShapeIt(){
       <div className="game-layout"style={{display:"flex",gap:28,padding:"0 12px 20px",
         alignItems:"flex-start",justifyContent:"center",flexWrap:"wrap"}}>
 
-        {/* LEFT PANEL — controls */}
+        {/* LEFT PANEL — colors + buttons (desktop only, mobile reordered via CSS) */}
         <div className="panel-controls"style={{width:160,display:"flex",flexDirection:"column",gap:16,flexShrink:0}}>
           <div>
             <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
@@ -685,6 +701,63 @@ export default function ShapeIt(){
                   cursor:"pointer",outline:"none",
                   boxShadow:selColor===name?`0 0 0 2px ${TH.bg}`:"none"
                 }}/>
+              ))}
+            </div>
+          </div>
+          <div className="hide-mobile"style={{display:"flex",flexDirection:"column",gap:16}}>
+            {/* Desktop: pieces here */}
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
+                textTransform:"uppercase",letterSpacing:"0.08em"}}>Pieces</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {PIECES.map(p=>(
+                  <div key={p.id}style={{padding:4}}>
+                    <PiecePreview piece={p}found={!!placedPieces[p.id]}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={handleClear}style={{flex:1,padding:"10px 8px",fontSize:12,fontWeight:500,
+                borderRadius:8,cursor:"pointer",background:TH.gridBg,color:TH.textSecondary,
+                border:`1px solid ${TH.gridLine}`,opacity:gameOver?0.4:1}}>Clear</button>
+              <button onClick={handleNewPuzzle}style={{flex:1,padding:"10px 8px",fontSize:12,fontWeight:500,
+                borderRadius:8,cursor:"pointer",background:TH.gridBg,color:TH.textSecondary,
+                border:`1px solid ${TH.gridLine}`}}>New</button>
+            </div>
+            {!gameOver&&!celebrating&&(
+              <button onClick={handleSubmit}style={{padding:"12px 14px",fontSize:14,fontWeight:600,
+                borderRadius:8,cursor:"pointer",background:"#1E88E5",color:"#fff",border:"none"}}>
+                Submit solution
+              </button>
+            )}
+            <div style={{fontSize:11,color:TH.textTertiary,lineHeight:1.8}}>
+              Click cell: diagonal<br/>Click grid line: edge<br/>Click label: fire laser
+            </div>
+          </div>
+        </div>
+
+        {/* BOARD */}
+        <div className="panel-board"style={{flexShrink:0}}>
+          {board}
+        </div>
+
+        {/* QUERY LOG */}
+        <div className="panel-log"style={{width:220,minWidth:190,flexShrink:0}}>
+          {queryLog}
+        </div>
+
+        {/* MOBILE-ONLY: pieces + buttons at bottom */}
+        <div className="panel-mobile-bottom"style={{display:"none",width:"100%",maxWidth:600,
+          flexDirection:"column",gap:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:6,
+              textTransform:"uppercase",letterSpacing:"0.08em"}}>Pieces</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
+              {PIECES.map(p=>(
+                <div key={p.id}style={{padding:2}}>
+                  <PiecePreview piece={p}found={!!placedPieces[p.id]}size={14}/>
+                </div>
               ))}
             </div>
           </div>
@@ -702,32 +775,6 @@ export default function ShapeIt(){
               Submit solution
             </button>
           )}
-          <div className="hide-mobile"style={{fontSize:11,color:TH.textTertiary,lineHeight:1.8}}>
-            Click cell: diagonal<br/>Click grid line: edge<br/>Click label: fire laser
-          </div>
-        </div>
-
-        {/* BOARD */}
-        <div className="panel-board"style={{flexShrink:0}}>
-          {board}
-        </div>
-
-        {/* PIECES — below board on mobile */}
-        <div className="panel-pieces"style={{width:160,flexShrink:0}}>
-          <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
-            textTransform:"uppercase",letterSpacing:"0.08em"}}>Pieces</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {PIECES.map(p=>(
-              <div key={p.id}style={{padding:4}}>
-                <PiecePreview piece={p}found={!!placedPieces[p.id]}/>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* QUERY LOG */}
-        <div className="panel-log"style={{width:220,minWidth:190,flexShrink:0}}>
-          {queryLog}
         </div>
       </div>
 
@@ -761,7 +808,8 @@ function CelebrationOverlay({queries,solveTime,onClose}){
       @keyframes sb{0%{transform:scale(.3) rotate(-10deg);opacity:0}50%{transform:scale(1.1) rotate(2deg);opacity:1}
       70%{transform:scale(.95) rotate(-1deg)}100%{transform:scale(1) rotate(0);opacity:1}}
     `}</style>
-    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,overflow:"hidden"}}>
+    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,overflow:"hidden",
+      display:"flex",alignItems:"center",justifyContent:"center"}}>
       {particles.map(p=>{
         const s={position:"absolute",left:`${p.left}%`,top:0,width:p.size,height:p.size,opacity:0,
           animation:`sf ${p.duration}s ${p.delay}s ease-out forwards`,"--d":`${p.drift}px`,"--s":`${p.spinDir*p.spinAmount}deg`};
@@ -771,9 +819,9 @@ function CelebrationOverlay({queries,solveTime,onClose}){
           {p.type==="square"&&<rect x="3"y="3"width="18"height="18"fill={p.color}opacity={0.85}transform="rotate(15 12 12)"/>}
         </svg></div>);
       })}
-      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+      <div style={{position:"relative",
         animation:"sb .6s .2s ease-out both",background:"white",borderRadius:16,
-        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,
+        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,margin:16,
         boxShadow:"0 8px 40px rgba(0,0,0,.15)",textAlign:"center",pointerEvents:"auto"}}>
         <button onClick={onClose}style={{position:"absolute",top:10,right:14,background:"none",
           border:"none",fontSize:22,color:"#bbb",cursor:"pointer",padding:4}}>✕</button>
@@ -814,7 +862,8 @@ function GameOverOverlay({queries,onNewPuzzle,onClose}){
       @keyframes sbf{0%{transform:scale(.3);opacity:0}40%{transform:scale(1.05);opacity:1}
       60%{transform:scale(.97)}100%{transform:scale(1);opacity:1}}
     `}</style>
-    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,overflow:"hidden"}}>
+    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,overflow:"hidden",
+      display:"flex",alignItems:"center",justifyContent:"center"}}>
       {particles.map(p=>{
         const s={position:"absolute",left:`${p.left}%`,top:0,width:p.size,height:p.size,opacity:0,
           animation:`sfg ${p.duration}s ${p.delay}s ease-out forwards`,"--d":`${p.drift}px`,"--s":`${p.spinDir*p.spinAmount}deg`};
@@ -824,9 +873,9 @@ function GameOverOverlay({queries,onNewPuzzle,onClose}){
           {p.type==="square"&&<rect x="3"y="3"width="18"height="18"fill={p.color}opacity={0.5}transform="rotate(15 12 12)"/>}
         </svg></div>);
       })}
-      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+      <div style={{position:"relative",
         animation:"sbf .5s .15s ease-out both",background:"white",borderRadius:16,
-        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,
+        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,margin:16,
         boxShadow:"0 8px 40px rgba(0,0,0,.18)",textAlign:"center",pointerEvents:"auto"}}>
         <button onClick={onClose}style={{position:"absolute",top:10,right:14,background:"none",
           border:"none",fontSize:22,color:"#bbb",cursor:"pointer",padding:4}}>✕</button>
