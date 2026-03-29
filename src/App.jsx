@@ -134,8 +134,6 @@ const DESKTOP_PIECES = [
 
 const MOBILE_SHAPE_BANK = [
   { name:"Square", cells:[[0,0,"\\f"]] },
-  { name:"Half", cells:[[0,0,"/"]] },
-  { name:"Half", cells:[[0,0,"\\"]] },
   { name:"Sm diamond", cells:[[0,0,"/b"],[0,1,"\\b"],[1,0,"\\"],[1,1,"/"]] },
   { name:"Sm tri", cells:[[0,0,"\\f"],[0,1,"/"],[1,0,"/"]] },
   { name:"Sm para", cells:[[0,0,"/b"],[0,1,"/"]] },
