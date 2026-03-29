@@ -416,10 +416,6 @@ export default function ShapeIt(){
     if(gameOver||celebrating)return;
     setGuess(Array.from({length:ROWS},()=>Array(COLS).fill(null)));
     setEdgeColors({});
-    setHistory([]);
-    setUsedLabels(new Set());
-    setHighlightRow(null);
-    setActiveLabels(null);
   },[gameOver,celebrating]);
 
   const handleNewPuzzle=useCallback(()=>{
