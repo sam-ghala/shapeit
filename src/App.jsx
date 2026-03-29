@@ -40,40 +40,41 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbzAppH4JUwH9jJ00hsrEtRmpHhm9lIzMHC15F0IBuSGuSPH-ewnAbRD3Ek_OsJmbKdX/exec";
+const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbz_F_EhuCP9-vKyVfoFxi9omP-voOKF-SExpXg3pk17ZExTqEK1BGxCdPp5BrgSeHJX/exec";
 
 function logSubmission(result, solveTimeSec, queryCount) {
   if (!ANALYTICS_URL) return;
   try {
-    const nav = navigator || {};
-    const conn = nav.connection || nav.mozConnection || nav.webkitConnection || {};
-    const timeStr = solveTimeSec != null
-      ? `${Math.floor(solveTimeSec/60)}:${String(solveTimeSec%60).padStart(2,"0")}`
+    var nav = navigator;
+    var conn = nav.connection || nav.mozConnection || nav.webkitConnection || {};
+    var timeStr = solveTimeSec != null
+      ? Math.floor(solveTimeSec/60) + ":" + String(solveTimeSec%60).padStart(2,"0")
       : "";
-    fetch(ANALYTICS_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        command: result,
-        solveTime: timeStr,
-        queries: queryCount,
-        platform: IS_MOBILE ? "mobile" : "desktop",
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-        locale: nav.language || "",
-        browser: nav.userAgent || "",
-        screen: screen.width + "x" + screen.height,
-        os: nav.platform || "",
-        viewport: window.innerWidth + "x" + window.innerHeight,
-        referrer: document.referrer || "",
-        cores: nav.hardwareConcurrency || "",
-        memory: nav.deviceMemory || "",
-        touch: ("ontouchstart" in window) ? "yes" : "no",
-        dpr: window.devicePixelRatio || "",
-        depth: screen.colorDepth || "",
-        dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
-        conn: conn.effectiveType || "",
-        dnt: nav.doNotTrack || ""
-      })
-    });
+    var params = new URLSearchParams();
+    params.set("result", result);
+    params.set("solveTime", timeStr);
+    params.set("queries", queryCount);
+    params.set("platform", IS_MOBILE ? "mobile" : "desktop");
+    params.set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+    params.set("locale", nav.language || "");
+    params.set("browser", nav.userAgent || "");
+    params.set("screen", screen.width + "x" + screen.height);
+    params.set("os", nav.platform || "");
+    params.set("viewport", window.innerWidth + "x" + window.innerHeight);
+    params.set("referrer", document.referrer || "");
+    params.set("cores", String(nav.hardwareConcurrency || ""));
+    params.set("memory", String(nav.deviceMemory || ""));
+    params.set("touch", ("ontouchstart" in window) ? "yes" : "no");
+    params.set("dpr", String(window.devicePixelRatio || ""));
+    params.set("depth", String(screen.colorDepth || ""));
+    params.set("dark", window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no");
+    params.set("connection", conn.effectiveType || "");
+    params.set("dnt", nav.doNotTrack || "");
+    var img = document.createElement("img");
+    img.src = ANALYTICS_URL + "?" + params.toString();
+    document.body.appendChild(img);
+    img.style.display = "none";
+    setTimeout(function() { if (img.parentNode) img.parentNode.removeChild(img); }, 5000);
   } catch (e) {}
 }
 
