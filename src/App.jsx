@@ -40,41 +40,36 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbz_F_EhuCP9-vKyVfoFxi9omP-voOKF-SExpXg3pk17ZExTqEK1BGxCdPp5BrgSeHJX/exec";
+const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbyGgPXi8Ga6l4yI3kKvycbkDVU2B1YpvsB5KKKTBLmP2uFp7cPddOEZDtrN75fsQluA/exec";
 
 function logSubmission(result, solveTimeSec, queryCount) {
-  if (!ANALYTICS_URL) return;
   try {
     var nav = navigator;
     var conn = nav.connection || nav.mozConnection || nav.webkitConnection || {};
     var timeStr = solveTimeSec != null
       ? Math.floor(solveTimeSec/60) + ":" + String(solveTimeSec%60).padStart(2,"0")
       : "";
-    var params = new URLSearchParams();
-    params.set("result", result);
-    params.set("solveTime", timeStr);
-    params.set("queries", queryCount);
-    params.set("platform", IS_MOBILE ? "mobile" : "desktop");
-    params.set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "");
-    params.set("locale", nav.language || "");
-    params.set("browser", nav.userAgent || "");
-    params.set("screen", screen.width + "x" + screen.height);
-    params.set("os", nav.platform || "");
-    params.set("viewport", window.innerWidth + "x" + window.innerHeight);
-    params.set("referrer", document.referrer || "");
-    params.set("cores", String(nav.hardwareConcurrency || ""));
-    params.set("memory", String(nav.deviceMemory || ""));
-    params.set("touch", ("ontouchstart" in window) ? "yes" : "no");
-    params.set("dpr", String(window.devicePixelRatio || ""));
-    params.set("depth", String(screen.colorDepth || ""));
-    params.set("dark", window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no");
-    params.set("connection", conn.effectiveType || "");
-    params.set("dnt", nav.doNotTrack || "");
-    var img = document.createElement("img");
-    img.src = ANALYTICS_URL + "?" + params.toString();
-    document.body.appendChild(img);
-    img.style.display = "none";
-    setTimeout(function() { if (img.parentNode) img.parentNode.removeChild(img); }, 5000);
+    navigator.sendBeacon("/api/log", JSON.stringify({
+      result: result,
+      solveTime: timeStr,
+      queries: queryCount,
+      platform: IS_MOBILE ? "mobile" : "desktop",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      locale: nav.language || "",
+      browser: nav.userAgent || "",
+      screen: screen.width + "x" + screen.height,
+      os: nav.platform || "",
+      viewport: window.innerWidth + "x" + window.innerHeight,
+      referrer: document.referrer || "",
+      cores: String(nav.hardwareConcurrency || ""),
+      memory: String(nav.deviceMemory || ""),
+      touch: ("ontouchstart" in window) ? "yes" : "no",
+      dpr: String(window.devicePixelRatio || ""),
+      depth: String(screen.colorDepth || ""),
+      dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
+      connection: conn.effectiveType || "",
+      dnt: nav.doNotTrack || ""
+    }));
   } catch (e) {}
 }
 
