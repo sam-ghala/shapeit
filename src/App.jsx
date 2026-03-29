@@ -27,7 +27,7 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycby2yj5pvszReympqEPO9Nxly01pBL50lX7IdwukH0eMFOIZEdf0XGct9dFyh1nSgAtm/exec";
+const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbyZk4sDyhS3bC_5twWyYdxymHlXW0NkpegkjTaFP0QgIOnkHn2WtkGLvx_LpR4E5qob/exec";
 
 function logSubmission(result, solveTimeSec, queryCount) {
   if (!ANALYTICS_URL) return;
@@ -37,7 +37,7 @@ function logSubmission(result, solveTimeSec, queryCount) {
     const timeStr = solveTimeSec != null
       ? `${Math.floor(solveTimeSec/60)}:${String(solveTimeSec%60).padStart(2,"0")}`
       : "";
-    const payload = {
+    const params = new URLSearchParams({
       result,
       solveTime: timeStr,
       queries: queryCount,
@@ -56,13 +56,8 @@ function logSubmission(result, solveTimeSec, queryCount) {
       dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
       connection: conn.effectiveType || "",
       dnt: nav.doNotTrack || ""
-    };
-    fetch(ANALYTICS_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload)
-    }).catch(() => {});
+    });
+    new Image().src = `${ANALYTICS_URL}?${params}`;
   } catch (e) { /* silent */ }
 }
 
