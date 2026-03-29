@@ -277,66 +277,213 @@ function PiecePreview({piece,found,size=22}){
 
 /* ─── How To Play Modal ─── */
 function HowToPlay({onClose}){
+  const S=28;
+  const c1="#E53935",c2="#1E88E5",c3="#FBC02D",c4="#9E9E9E";
+  const dot=(color,sz=10)=><span style={{display:"inline-block",width:sz,height:sz,borderRadius:"50%",
+    background:color,verticalAlign:"middle",margin:"0 2px",border:color==="#9E9E9E"?"1.5px solid #ccc":"none"}}/>;
+  const sec={fontSize:16,fontWeight:700,margin:"22px 0 10px",display:"flex",alignItems:"center",gap:8};
+  const p={fontSize:14,lineHeight:1.7,color:"#444",margin:"0 0 12px"};
+  const fig={background:"#fafafa",borderRadius:10,padding:12,margin:"10px 0 16px",display:"flex",
+    alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8};
+
+  function MiniGrid({w,h,children,label}){
+    const gw=w*S,gh=h*S,m=4;
+    return(<div style={{textAlign:"center"}}>
+      <svg width={gw+m*2}height={gh+m*2}viewBox={`0 0 ${gw+m*2} ${gh+m*2}`}>
+        <rect x={m}y={m}width={gw}height={gh}fill="#fff"rx={2}/>
+        {Array.from({length:w+1},(_,i)=><line key={`v${i}`}x1={m+i*S}y1={m}x2={m+i*S}y2={m+gh}
+          stroke="#ddd"strokeWidth={i===0||i===w?1.5:0.5}/>)}
+        {Array.from({length:h+1},(_,i)=><line key={`h${i}`}x1={m}y1={m+i*S}x2={m+gw}y2={m+i*S}
+          stroke="#ddd"strokeWidth={i===0||i===h?1.5:0.5}/>)}
+        {children(m)}
+      </svg>
+      {label&&<div style={{fontSize:11,color:"#999",marginTop:4}}>{label}</div>}
+    </div>);
+  }
+
   return(
     <div style={{position:"fixed",inset:0,zIndex:10000,display:"flex",alignItems:"center",
-      justifyContent:"center",background:"rgba(0,0,0,0.4)",padding:16}}onClick={onClose}>
-      <div style={{background:"white",borderRadius:16,padding:"24px 24px",maxWidth:520,width:"100%",
-        maxHeight:"85vh",overflowY:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.2)",position:"relative"}}
+      justifyContent:"center",background:"rgba(0,0,0,0.45)",padding:12}}onClick={onClose}>
+      <div style={{background:"white",borderRadius:16,padding:"28px 24px",maxWidth:560,width:"100%",
+        maxHeight:"88vh",overflowY:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",position:"relative"}}
         onClick={e=>e.stopPropagation()}>
         <button onClick={onClose}style={{position:"absolute",top:12,right:16,background:"none",
           border:"none",fontSize:22,color:"#bbb",cursor:"pointer",padding:4}}>✕</button>
-        <h2 style={{fontSize:22,fontWeight:700,marginTop:0,marginBottom:16}}>How to play</h2>
 
-        <p style={{fontSize:14,lineHeight:1.7,color:"#444",margin:"0 0 14px"}}>
-          Five colored gemstone pieces are hidden on the grid. Your goal is to find the exact
-          position and shape of each piece.
-        </p>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontSize:28,fontWeight:800,marginBottom:4}}>
+            <span style={{color:c1}}>S</span><span style={{color:c2}}>h</span>
+            <span style={{color:c3}}>a</span><span style={{color:c4}}>p</span>
+            <span style={{color:c1}}>e</span><span style={{color:c2}}>I</span>
+            <span style={{color:c3}}>t</span>
+          </div>
+          <div style={{fontSize:14,color:"#888"}}>Find 5 hidden pieces on the grid</div>
+          <div style={{display:"flex",gap:6,justifyContent:"center",marginTop:8}}>
+            {dot(c1,14)}{dot(c2,14)}{dot(c3,14)}{dot(c4,14)}{dot(c4,14)}
+          </div>
+        </div>
 
-        <h3 style={{fontSize:15,fontWeight:600,margin:"18px 0 8px",color:"#333"}}>Firing lasers</h3>
-        <p style={{fontSize:14,lineHeight:1.7,color:"#444",margin:"0 0 14px"}}>
-          Click any label around the grid edge (1–10, A–H, 11–18, I–R) to fire a laser
-          into that row or column. The laser travels in a straight line until it hits a
-          piece edge, where it reflects:
-        </p>
-        <ul style={{fontSize:14,lineHeight:1.8,color:"#444",margin:"0 0 14px",paddingLeft:20}}>
-          <li><strong>Diagonal edges</strong> (the slanted sides of pieces) reflect the laser 90°</li>
-          <li><strong>Flat edges</strong> (horizontal/vertical sides) bounce the laser straight back</li>
-        </ul>
-        <p style={{fontSize:14,lineHeight:1.7,color:"#444",margin:"0 0 14px"}}>
-          The query log shows where the laser exited and which colors it passed through
-          (in random order). Used labels are dimmed. Clicking a used label highlights its
-          past results in the log.
-        </p>
-
-        <h3 style={{fontSize:15,fontWeight:600,margin:"18px 0 8px",color:"#333"}}>Placing your guess</h3>
-        <p style={{fontSize:14,lineHeight:1.7,color:"#444",margin:"0 0 14px"}}>
-          Select a color, then draw the piece outlines on the grid:
-        </p>
-        <ul style={{fontSize:14,lineHeight:1.8,color:"#444",margin:"0 0 14px",paddingLeft:20}}>
-          <li><strong>Click a cell</strong> to place a diagonal line (click again to flip, third click to clear)</li>
-          <li><strong>Click a grid line</strong> to color that horizontal or vertical edge</li>
-          <li>When all outline edges of a piece are placed, it fills with color</li>
-        </ul>
-
-        <h3 style={{fontSize:15,fontWeight:600,margin:"18px 0 8px",color:"#333"}}>Submitting</h3>
-        <p style={{fontSize:14,lineHeight:1.7,color:"#444",margin:"0 0 14px"}}>
-          When you think you've found all five pieces, click <strong>Submit solution</strong>.
-          If every piece is in the correct position, you win! If any piece is wrong,
-          the game ends and the correct solution is revealed.
-        </p>
-
-        <h3 style={{fontSize:15,fontWeight:600,margin:"18px 0 8px",color:"#333"}}>The pieces</h3>
-        <div style={{display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center",margin:"12px 0"}}>
-          {PIECES.map(p=>(
-            <div key={p.id}style={{textAlign:"center"}}>
-              <PiecePreview piece={p}found={false}size={18}/>
-              <div style={{fontSize:11,color:"#999",marginTop:4}}>{p.name}</div>
+        {/* ── STEP 1: THE PIECES ── */}
+        <div style={sec}>{dot(c1,12)}{dot(c2,12)}{dot(c3,12)} The 5 hidden pieces</div>
+        <p style={p}>Each puzzle hides these 5 colored pieces somewhere on the 10×8 grid. Your job is to find exactly where each one is.</p>
+        <div style={{...fig,flexDirection:"row",flexWrap:"wrap",gap:16}}>
+          {PIECES.map(pc=>(
+            <div key={pc.id}style={{textAlign:"center"}}>
+              <PiecePreview piece={pc}found={false}size={20}/>
             </div>
           ))}
         </div>
 
-        <div style={{fontSize:13,color:"#999",marginTop:18,textAlign:"center"}}>
-          A new puzzle is generated each day. Good luck!
+        {/* ── STEP 2: FIRING LASERS ── */}
+        <div style={sec}>{dot(c2,12)} Fire lasers to gather clues</div>
+        <p style={p}>Click any label around the grid (1–10, A–H, etc.) to shoot a laser into that row or column. The laser travels in a straight line until it hits a piece edge.</p>
+
+        <div style={fig}>
+          <div style={{fontSize:12,color:"#666",marginBottom:4,fontWeight:600}}>Laser enters from "4", bounces off diagonal, exits at "B"</div>
+          <MiniGrid w={5}h={3}>{(m)=>{
+            const h=S/2;
+            return<>
+            {/* Yellow right triangle: hypotenuse from (1,3)top-right to (3,3)bottom-left, vertical right edge, horizontal bottom */}
+            <polygon points={`${m+3*S},${m+3*S} ${m+5*S},${m+S} ${m+5*S},${m+3*S}`}fill="rgba(251,192,45,0.2)"/>
+            <line x1={m+3*S}y1={m+3*S}x2={m+5*S}y2={m+S}stroke={c3}strokeWidth={2.5}/>
+            <line x1={m+5*S}y1={m+S}x2={m+5*S}y2={m+3*S}stroke={c3}strokeWidth={2.5}/>
+            <line x1={m+5*S}y1={m+3*S}x2={m+3*S}y2={m+3*S}stroke={c3}strokeWidth={2.5}/>
+            {/* Laser: enters col 4 center, goes down to diagonal, bounces left */}
+            <line x1={m+3*S+h}y1={m}x2={m+3*S+h}y2={m+2*S+h}stroke={c2}strokeWidth={2}strokeDasharray="5 3"opacity={0.7}/>
+            <line x1={m+3*S+h}y1={m+2*S+h}x2={m}y2={m+2*S+h}stroke={c2}strokeWidth={2}strokeDasharray="5 3"opacity={0.7}/>
+            <circle cx={m+3*S+h}cy={m+2*S+h}r={3}fill={c2}opacity={0.5}/>
+            <circle cx={m+3*S+h}cy={m-1}r={4}fill={c2}/>
+            <circle cx={m-1}cy={m+2*S+h}r={4}fill={c2}/>
+            <text x={m+3*S+h}y={m-10}textAnchor="middle"fontSize={10}fill="#666"fontWeight={600}>4</text>
+            <text x={m-10}y={m+2*S+h+4}textAnchor="middle"fontSize={10}fill="#666"fontWeight={600}>B</text>
+            </>;
+          }}</MiniGrid>
+          <div style={{fontSize:12,color:"#888"}}>The diagonal edge reflects the laser 90 degrees</div>
+        </div>
+
+        <div style={fig}>
+          <div style={{fontSize:12,color:"#666",marginBottom:4,fontWeight:600}}>Flat edge bounces laser straight back</div>
+          <MiniGrid w={5}h={4}>{(m)=>{
+            const h=S/2;
+            return<>
+            <polygon points={`${m+S},${m+3*S} ${m+2*S},${m+2*S} ${m+4*S},${m+2*S} ${m+3*S},${m+3*S}`}fill="rgba(229,57,53,0.2)"/>
+            <line x1={m+S}y1={m+3*S}x2={m+2*S}y2={m+2*S}stroke={c1}strokeWidth={2.5}/>
+            <line x1={m+2*S}y1={m+2*S}x2={m+4*S}y2={m+2*S}stroke={c1}strokeWidth={2.5}/>
+            <line x1={m+4*S}y1={m+2*S}x2={m+3*S}y2={m+3*S}stroke={c1}strokeWidth={2.5}/>
+            <line x1={m+3*S}y1={m+3*S}x2={m+S}y2={m+3*S}stroke={c1}strokeWidth={2.5}/>
+            <line x1={m+2*S+h-2}y1={m}x2={m+2*S+h-2}y2={m+2*S}stroke={c2}strokeWidth={2}strokeDasharray="5 3"opacity={0.7}/>
+            <line x1={m+2*S+h+2}y1={m+2*S}x2={m+2*S+h+2}y2={m}stroke={c2}strokeWidth={2}strokeDasharray="5 3"opacity={0.5}/>
+            <circle cx={m+2*S+h}cy={m-1}r={4}fill={c2}/>
+            <text x={m+2*S+h}y={m-10}textAnchor="middle"fontSize={10}fill="#666"fontWeight={600}>3</text>
+            </>;
+          }}</MiniGrid>
+          <div style={{fontSize:12,color:"#888"}}>Laser enters "3" and exits "3", bounced off the flat top of the parallelogram</div>
+        </div>
+
+        {/* ── STEP 3: READING THE CLUES ── */}
+        <div style={sec}>{dot(c3,12)} Reading the query log</div>
+        <p style={p}>After each laser, the log shows the entry point, exit point, and which piece colors the laser passed through (in random order).</p>
+
+        <div style={fig}>
+          <div style={{background:"white",borderRadius:8,padding:"8px 16px",border:"1px solid #e8e8e8",
+            fontSize:13,display:"flex",gap:20,alignItems:"center",width:"100%",maxWidth:340}}>
+            <span style={{color:"#999",fontSize:12}}>1</span>
+            <span style={{fontWeight:700}}>P</span>
+            <span style={{fontWeight:700}}>3</span>
+            <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+              {dot(c3,14)}{dot(c1,14)}{dot(c4,14)}{dot(c2,14)}
+            </div>
+          </div>
+          <div style={{fontSize:12,color:"#888",marginTop:2}}>
+            Laser entered at P, exited at 3. Hit {dot(c3)} yellow, {dot(c1)} red, {dot(c4)} white, and {dot(c2)} blue
+          </div>
+        </div>
+
+        <p style={p}>Colors appear in random order. You know <em>which</em> colors were hit, but not the sequence. A result with no colors means the laser passed through empty space.</p>
+
+        {/* ── STEP 4: PLACING YOUR GUESS ── */}
+        <div style={sec}>{dot(c1,12)} Drawing your guess</div>
+        <p style={p}>Select a color, then build piece outlines on the grid:</p>
+
+        <div style={{...fig,flexDirection:"row",gap:24,flexWrap:"wrap"}}>
+          <div style={{textAlign:"center"}}>
+            <MiniGrid w={2}h={2}label="Click cell: diagonal">{(m)=><>
+              <line x1={m+2}y1={m+2}x2={m+S-2}y2={m+S-2}stroke={c1}strokeWidth={3}strokeLinecap="round"/>
+            </>}</MiniGrid>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <MiniGrid w={2}h={2}label="Click again: flip">{(m)=><>
+              <line x1={m+2}y1={m+S-2}x2={m+S-2}y2={m+2}stroke={c1}strokeWidth={3}strokeLinecap="round"/>
+            </>}</MiniGrid>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <MiniGrid w={2}h={2}label="Click grid line: edge">{(m)=><>
+              <line x1={m}y1={m+S}x2={m+S}y2={m+S}stroke={c2}strokeWidth={3.5}strokeLinecap="round"/>
+            </>}</MiniGrid>
+          </div>
+        </div>
+
+        <div style={fig}>
+          <div style={{fontSize:12,color:"#666",marginBottom:4,fontWeight:600}}>Complete outline and the piece fills in</div>
+          <div style={{display:"flex",gap:20,flexWrap:"wrap",justifyContent:"center"}}>
+            <MiniGrid w={3}h={1}label="Red parallelogram">{(m)=><>
+              <polygon points={`${m},${m+S} ${m+S},${m} ${m+3*S},${m} ${m+2*S},${m+S}`}fill="rgba(229,57,53,0.3)"/>
+              <line x1={m}y1={m+S}x2={m+S}y2={m}stroke={c1}strokeWidth={2}/>
+              <line x1={m+S}y1={m}x2={m+3*S}y2={m}stroke={c1}strokeWidth={2}/>
+              <line x1={m+3*S}y1={m}x2={m+2*S}y2={m+S}stroke={c1}strokeWidth={2}/>
+              <line x1={m+2*S}y1={m+S}x2={m}y2={m+S}stroke={c1}strokeWidth={2}/>
+            </>}</MiniGrid>
+            <MiniGrid w={2}h={2}label="White diamond">{(m)=><>
+              <polygon points={`${m+S},${m} ${m+2*S},${m+S} ${m+S},${m+2*S} ${m},${m+S}`}fill="rgba(158,158,158,0.2)"/>
+              <line x1={m+S}y1={m}x2={m+2*S}y2={m+S}stroke={c4}strokeWidth={2}/>
+              <line x1={m+2*S}y1={m+S}x2={m+S}y2={m+2*S}stroke={c4}strokeWidth={2}/>
+              <line x1={m+S}y1={m+2*S}x2={m}y2={m+S}stroke={c4}strokeWidth={2}/>
+              <line x1={m}y1={m+S}x2={m+S}y2={m}stroke={c4}strokeWidth={2}/>
+            </>}</MiniGrid>
+          </div>
+        </div>
+
+        {/* ── STEP 5: SUBMITTING ── */}
+        <div style={sec}>{dot(c4,12)} Submit when ready</div>
+        <p style={p}>Once you've placed all 5 pieces, hit <span style={{background:"#1E88E5",color:"white",
+          padding:"2px 10px",borderRadius:4,fontSize:13,fontWeight:600}}>Submit solution</span>. 
+          Every piece must be in the <em>exact</em> correct position to win.</p>
+
+        <div style={{display:"flex",gap:16,justifyContent:"center",margin:"14px 0 8px",flexWrap:"wrap"}}>
+          <div style={{background:"white",borderRadius:12,padding:"18px 24px",textAlign:"center",
+            boxShadow:"0 4px 20px rgba(0,0,0,0.1)",minWidth:180}}>
+            <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>
+              <span style={{color:c1}}>S</span><span style={{color:c2}}>o</span>
+              <span style={{color:c3}}>l</span><span style={{color:c4}}>v</span>
+              <span style={{color:c1}}>e</span><span style={{color:c2}}>d</span>
+              <span style={{color:c3}}>!</span>
+            </div>
+            <div style={{fontSize:12,color:"#333",fontWeight:600}}>Solved in 2:34</div>
+            <div style={{fontSize:11,color:"#666",marginTop:2}}>with 12 queries</div>
+            <div style={{marginTop:8,background:"#1E88E5",color:"white",padding:"4px 14px",
+              borderRadius:6,fontSize:11,fontWeight:600,display:"inline-block"}}>Share result</div>
+          </div>
+          <div style={{background:"white",borderRadius:12,padding:"18px 24px",textAlign:"center",
+            boxShadow:"0 4px 20px rgba(0,0,0,0.1)",minWidth:180}}>
+            <div style={{fontSize:22,fontWeight:700,color:c1,marginBottom:6}}>Incorrect</div>
+            <div style={{fontSize:11,color:"#666"}}>12 queries used</div>
+            <div style={{fontSize:11,color:"#999",marginTop:4}}>The correct solution<br/>is shown on the board</div>
+          </div>
+        </div>
+        <p style={{...p,textAlign:"center",fontSize:13,color:"#999"}}>If wrong, the correct answer is shown. One shot, make it count.</p>
+
+        {/* ── TIPS ── */}
+        <div style={sec}>{dot(c2,12)} Tips</div>
+        <div style={{background:"#f8f8f8",borderRadius:10,padding:"14px 16px",margin:"0 0 16px",fontSize:13,
+          lineHeight:1.8,color:"#555"}}>
+          <span style={{fontWeight:600}}>Start with edges.</span> Fire lasers along the borders to figure out which rows and columns contain pieces.<br/><br/>
+          <span style={{fontWeight:600}}>Count the colors.</span> If a laser hits 3+ colors, those pieces are all lined up in that row/column.<br/><br/>
+          <span style={{fontWeight:600}}>Use the dimmed labels.</span> Already-queried labels are grayed out. Click them again to re-highlight the results.<br/><br/>
+          <span style={{fontWeight:600}}>Shapes fill automatically.</span> When you complete an outline, it fills with color. Helpful to track your progress.
+        </div>
+
+        <div style={{textAlign:"center",fontSize:13,color:"#aaa",marginTop:12}}>
+          A new puzzle every day. Good luck! {dot(c1)}{dot(c2)}{dot(c3)}
         </div>
       </div>
     </div>
