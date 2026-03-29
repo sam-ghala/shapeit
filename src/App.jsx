@@ -40,7 +40,7 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "";
+const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbyMB4bszOO2u4NJ1P5GIaPxSJX0XcI5UK2nXW9Fl71xr8W2TzXh0rAWTvecdp_6J7CH/exec";
 
 function logSubmission(result, solveTimeSec, queryCount) {
   if (!ANALYTICS_URL) return;
