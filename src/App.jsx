@@ -70,11 +70,12 @@ function logSubmission(result, solveTimeSec, queryCount) {
     params.set("dark", window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no");
     params.set("connection", conn.effectiveType || "");
     params.set("dnt", nav.doNotTrack || "");
-    var img = document.createElement("img");
-    img.src = ANALYTICS_URL + "?" + params.toString();
-    document.body.appendChild(img);
-    img.style.display = "none";
-    setTimeout(function() { if (img.parentNode) img.parentNode.removeChild(img); }, 5000);
+    // var img = document.createElement("img");
+    // img.src = ANALYTICS_URL + "?" + params.toString();
+    // document.body.appendChild(img);
+    // img.style.display = "none";
+    // setTimeout(function() { if (img.parentNode) img.parentNode.removeChild(img); }, 5000);
+    fetch(ANALYTICS_URL + "?" + params.toString(), { mode: "no-cors", redirect: "follow" }).catch(function() {});
   } catch (e) {}
 }
 
