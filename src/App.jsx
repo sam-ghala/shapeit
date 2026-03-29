@@ -265,7 +265,7 @@ function HowToPlay({onClose}){
   return(
     <div style={{position:"fixed",inset:0,zIndex:10000,display:"flex",alignItems:"center",
       justifyContent:"center",background:"rgba(0,0,0,0.4)",padding:16}}onClick={onClose}>
-      <div style={{background:"white",borderRadius:16,padding:"32px 36px",maxWidth:520,width:"100%",
+      <div style={{background:"white",borderRadius:16,padding:"24px 24px",maxWidth:520,width:"100%",
         maxHeight:"85vh",overflowY:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.2)",position:"relative"}}
         onClick={e=>e.stopPropagation()}>
         <button onClick={onClose}style={{position:"absolute",top:12,right:16,background:"none",
@@ -336,7 +336,6 @@ export default function ShapeIt(){
   const[guess,setGuess]=useState(()=>Array.from({length:ROWS},()=>Array(COLS).fill(null)));
   const[history,setHistory]=useState([]);
   const[edgeColors,setEdgeColors]=useState({});
-  const[showPath,setShowPath]=useState(null);
   const[activeLabels,setActiveLabels]=useState(null);
   const[usedLabels,setUsedLabels]=useState(new Set());
   const[celebrating,setCelebrating]=useState(false);
@@ -349,6 +348,7 @@ export default function ShapeIt(){
   const[startTime,setStartTime]=useState(()=>Date.now());
   const[solveTime,setSolveTime]=useState(null);
   const[showHowTo,setShowHowTo]=useState(false);
+  const[newFlash,setNewFlash]=useState(false);
 
   const placedPieces=useMemo(()=>{
     const found={};
@@ -385,11 +385,10 @@ export default function ShapeIt(){
     const exitKey=`${result.exitSide}-${result.exitIdx}`;
     const shuffled=[...result.colors].sort(()=>Math.random()-0.5);
     setHistory(prev=>[...prev,{entry:getLabel(side,idx),exit:getLabel(result.exitSide,result.exitIdx),
-      colors:shuffled,path:result.path}]);
-    setShowPath(result.path);
+      colors:shuffled}]);
     setActiveLabels({entry:entryKey,exit:exitKey});
     setUsedLabels(prev=>{const next=new Set(prev);next.add(entryKey);next.add(exitKey);return next;});
-    setTimeout(()=>{setShowPath(null);setActiveLabels(null);},1800);
+    setTimeout(()=>{setActiveLabels(null);},1800);
   },[puzzle,gameOver,celebrating,usedLabels,history]);
 
   const handleEdgeClick=useCallback((key)=>{
@@ -399,15 +398,24 @@ export default function ShapeIt(){
 
   const handleClear=useCallback(()=>{
     if(gameOver||celebrating)return;
-    setGuess(Array.from({length:ROWS},()=>Array(COLS).fill(null)));setEdgeColors({});
+    setGuess(Array.from({length:ROWS},()=>Array(COLS).fill(null)));
+    setEdgeColors({});
+    setHistory([]);
+    setUsedLabels(new Set());
+    setHighlightRow(null);
+    setActiveLabels(null);
   },[gameOver,celebrating]);
 
   const handleNewPuzzle=useCallback(()=>{
-    setPuzzleSeed(Date.now().toString());
-    setGuess(Array.from({length:ROWS},()=>Array(COLS).fill(null)));
-    setEdgeColors({});setHistory([]);setShowPath(null);setUsedLabels(new Set());
-    setCelebrating(false);setGameOver(false);setSubmitResult(null);
-    setOverlayDismissed(false);setStartTime(Date.now());setSolveTime(null);
+    setNewFlash(true);
+    setTimeout(()=>{
+      setPuzzleSeed(Date.now().toString());
+      setGuess(Array.from({length:ROWS},()=>Array(COLS).fill(null)));
+      setEdgeColors({});setHistory([]);setUsedLabels(new Set());
+      setCelebrating(false);setGameOver(false);setSubmitResult(null);
+      setOverlayDismissed(false);setStartTime(Date.now());setSolveTime(null);
+      setNewFlash(false);
+    },400);
   },[]);
 
   const handleSubmit=useCallback(()=>{
@@ -462,10 +470,6 @@ export default function ShapeIt(){
           ))}
           <PieceOutline absCells={p.absCells}color={PCOLORS[p.color]}strokeWidth={3}opacity={0.7}/>
         </g>
-      ))}
-
-      {showPath&&showPath.map(([r,c],i)=>(
-        <rect key={i}x={gx(c)+1}y={gy(r)+1}width={CS-2}height={CS-2}fill={TH.infoBg}rx={2}/>
       ))}
 
       {/* Placed piece fills */}
@@ -644,23 +648,32 @@ export default function ShapeIt(){
     <div style={{fontFamily:"system-ui,-apple-system,sans-serif",color:TH.textPrimary,
       background:TH.bg,minHeight:"100vh"}}>
 
-      {/* DESKTOP layout */}
-      <div className="desktop-layout"style={{display:"flex",gap:28,padding:"20px 12px",
+      {/* New puzzle flash */}
+      {newFlash&&<div style={{position:"fixed",inset:0,zIndex:9998,background:"white",
+        display:"flex",alignItems:"center",justifyContent:"center",
+        animation:"flashIn 0.4s ease-out forwards"}}>
+        <style>{`@keyframes flashIn{0%{opacity:1}70%{opacity:1}100%{opacity:0}}`}</style>
+        <div style={{fontSize:28,fontWeight:700,color:TH.textTertiary}}>New puzzle...</div>
+      </div>}
+
+      {/* Header — always on top */}
+      <div className="header-bar"style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+        padding:"16px 24px",maxWidth:1100,margin:"0 auto"}}>
+        <span style={{fontSize:22,fontWeight:700}}>ShapeIt</span>
+        <div style={{display:"flex",gap:12,alignItems:"center"}}>
+          <button onClick={()=>setShowHowTo(true)}style={{padding:"6px 14px",fontSize:12,
+            fontWeight:500,borderRadius:8,cursor:"pointer",background:TH.gridBg,
+            color:TH.textSecondary,border:`1px solid ${TH.gridLine}`}}>How to play</button>
+          <span style={{fontSize:13,color:TH.textTertiary}}>Day #{getDayNumber()}</span>
+        </div>
+      </div>
+
+      {/* Main layout */}
+      <div className="game-layout"style={{display:"flex",gap:28,padding:"0 12px 20px",
         alignItems:"flex-start",justifyContent:"center",flexWrap:"wrap"}}>
 
-        {/* LEFT PANEL */}
-        <div className="side-panel"style={{width:160,display:"flex",flexDirection:"column",gap:18,flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:11,fontWeight:600,color:TH.textTertiary,textTransform:"uppercase",
-              letterSpacing:"0.08em"}}>Pieces</span>
-          </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {PIECES.map(p=>(
-              <div key={p.id}style={{padding:4}}>
-                <PiecePreview piece={p}found={!!placedPieces[p.id]}/>
-              </div>
-            ))}
-          </div>
+        {/* LEFT PANEL — controls */}
+        <div className="panel-controls"style={{width:160,display:"flex",flexDirection:"column",gap:16,flexShrink:0}}>
           <div>
             <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
               textTransform:"uppercase",letterSpacing:"0.08em"}}>Color</div>
@@ -689,28 +702,31 @@ export default function ShapeIt(){
               Submit solution
             </button>
           )}
-          <div style={{fontSize:11,color:TH.textTertiary,lineHeight:1.8}}>
+          <div className="hide-mobile"style={{fontSize:11,color:TH.textTertiary,lineHeight:1.8}}>
             Click cell: diagonal<br/>Click grid line: edge<br/>Click label: fire laser
           </div>
         </div>
 
         {/* BOARD */}
-        <div style={{flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-            marginBottom:10,paddingLeft:M,paddingRight:M}}>
-            <span style={{fontSize:20,fontWeight:600}}>ShapeIt</span>
-            <div style={{display:"flex",gap:12,alignItems:"center"}}>
-              <button onClick={()=>setShowHowTo(true)}style={{padding:"6px 14px",fontSize:12,
-                fontWeight:500,borderRadius:8,cursor:"pointer",background:TH.gridBg,
-                color:TH.textSecondary,border:`1px solid ${TH.gridLine}`}}>How to play</button>
-              <span style={{fontSize:13,color:TH.textTertiary}}>Day #{getDayNumber()}</span>
-            </div>
-          </div>
+        <div className="panel-board"style={{flexShrink:0}}>
           {board}
         </div>
 
-        {/* RIGHT PANEL */}
-        <div className="side-panel"style={{width:220,minWidth:190,flexShrink:0}}>
+        {/* PIECES — below board on mobile */}
+        <div className="panel-pieces"style={{width:160,flexShrink:0}}>
+          <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
+            textTransform:"uppercase",letterSpacing:"0.08em"}}>Pieces</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {PIECES.map(p=>(
+              <div key={p.id}style={{padding:4}}>
+                <PiecePreview piece={p}found={!!placedPieces[p.id]}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* QUERY LOG */}
+        <div className="panel-log"style={{width:220,minWidth:190,flexShrink:0}}>
           {queryLog}
         </div>
       </div>
@@ -755,8 +771,9 @@ function CelebrationOverlay({queries,solveTime,onClose}){
           {p.type==="square"&&<rect x="3"y="3"width="18"height="18"fill={p.color}opacity={0.85}transform="rotate(15 12 12)"/>}
         </svg></div>);
       })}
-      <div style={{position:"absolute",top:"35%",left:"50%",transform:"translate(-50%,-50%)",
-        animation:"sb .6s .2s ease-out both",background:"white",borderRadius:16,padding:"32px 52px",
+      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        animation:"sb .6s .2s ease-out both",background:"white",borderRadius:16,
+        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,
         boxShadow:"0 8px 40px rgba(0,0,0,.15)",textAlign:"center",pointerEvents:"auto"}}>
         <button onClick={onClose}style={{position:"absolute",top:10,right:14,background:"none",
           border:"none",fontSize:22,color:"#bbb",cursor:"pointer",padding:4}}>✕</button>
@@ -807,8 +824,9 @@ function GameOverOverlay({queries,onNewPuzzle,onClose}){
           {p.type==="square"&&<rect x="3"y="3"width="18"height="18"fill={p.color}opacity={0.5}transform="rotate(15 12 12)"/>}
         </svg></div>);
       })}
-      <div style={{position:"absolute",top:"35%",left:"50%",transform:"translate(-50%,-50%)",
-        animation:"sbf .5s .15s ease-out both",background:"white",borderRadius:16,padding:"32px 52px",
+      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        animation:"sbf .5s .15s ease-out both",background:"white",borderRadius:16,
+        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,
         boxShadow:"0 8px 40px rgba(0,0,0,.18)",textAlign:"center",pointerEvents:"auto"}}>
         <button onClick={onClose}style={{position:"absolute",top:10,right:14,background:"none",
           border:"none",fontSize:22,color:"#bbb",cursor:"pointer",padding:4}}>✕</button>

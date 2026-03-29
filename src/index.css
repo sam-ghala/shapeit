@@ -9,22 +9,40 @@ body {
   color: #212121;
 }
 
-/* Mobile: stack vertically */
 @media (max-width: 860px) {
-  .desktop-layout {
+  .game-layout {
     flex-direction: column !important;
     align-items: center !important;
-    padding: 12px 8px !important;
+    padding: 0 8px 20px !important;
     gap: 16px !important;
   }
 
-  .side-panel {
-    width: 100% !important;
-    max-width: 600px !important;
+  .header-bar {
+    padding: 12px 16px !important;
   }
 
-  /* Reorder: title+pieces first, board second, colors+actions third, log fourth */
-  .desktop-layout > div:nth-child(1) { order: 1; } /* left panel: pieces + colors */
-  .desktop-layout > div:nth-child(2) { order: 2; } /* board */
-  .desktop-layout > div:nth-child(3) { order: 3; } /* query log */
+  .panel-board { order: 1; width: 100%; }
+  .panel-board svg { margin: 0 auto; }
+
+  .panel-pieces {
+    order: 2;
+    width: 100% !important;
+    max-width: 600px;
+  }
+
+  .panel-controls {
+    order: 3;
+    width: 100% !important;
+    max-width: 600px;
+  }
+
+  .panel-log {
+    order: 4;
+    width: 100% !important;
+    max-width: 600px;
+  }
+
+  .hide-mobile {
+    display: none !important;
+  }
 }
