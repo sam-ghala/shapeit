@@ -133,14 +133,12 @@ const DESKTOP_PIECES = [
 ];
 
 const MOBILE_SHAPE_BANK = [
-  { name:"Square", cells:[[0,0,"\\f"]] },
   { name:"Sm diamond", cells:[[0,0,"/b"],[0,1,"\\b"],[1,0,"\\"],[1,1,"/"]] },
   { name:"Sm tri", cells:[[0,0,"\\f"],[0,1,"/"],[1,0,"/"]] },
   { name:"Sm para", cells:[[0,0,"/b"],[0,1,"/"]] },
   { name:"Sm para", cells:[[0,0,"\\b"],[0,1,"\\"]] },
   { name:"Tall dia", cells:[[0,0,"/b"],[1,0,"\\"]] },
   { name:"Arrow", cells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]] },
-  { name:"Stripe", cells:[[0,0,"/f"],[0,1,"/f"]] },
 ];
 
 const MOBILE_COLORS = ["red","blue","yellow","white"];
