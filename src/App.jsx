@@ -40,7 +40,7 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycby7z8FoRiNFYHRy0LkP99E3N2uLZOdYRtZ0scOORX-osf2nFd1QjfldBHubRm2wpCcg/exec";
+const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbzAppH4JUwH9jJ00hsrEtRmpHhm9lIzMHC15F0IBuSGuSPH-ewnAbRD3Ek_OsJmbKdX/exec";
 
 function logSubmission(result, solveTimeSec, queryCount) {
   if (!ANALYTICS_URL) return;
@@ -50,33 +50,31 @@ function logSubmission(result, solveTimeSec, queryCount) {
     const timeStr = solveTimeSec != null
       ? `${Math.floor(solveTimeSec/60)}:${String(solveTimeSec%60).padStart(2,"0")}`
       : "";
-    const data = JSON.stringify({
-      command: result,
-      solveTime: timeStr,
-      queries: queryCount,
-      platform: IS_MOBILE ? "mobile" : "desktop",
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-      locale: nav.language || "",
-      browser: nav.userAgent || "",
-      screen: `${screen.width}x${screen.height}`,
-      os: nav.platform || nav.userAgentData?.platform || "",
-      viewport: `${window.innerWidth}x${window.innerHeight}`,
-      referrer: document.referrer || "",
-      cores: nav.hardwareConcurrency || "",
-      memory: nav.deviceMemory || "",
-      touch: "ontouchstart" in window || nav.maxTouchPoints > 0 ? "yes" : "no",
-      dpr: window.devicePixelRatio || "",
-      depth: screen.colorDepth || "",
-      dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
-      conn: conn.effectiveType || "",
-      dnt: nav.doNotTrack || ""
+    fetch(ANALYTICS_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        command: result,
+        solveTime: timeStr,
+        queries: queryCount,
+        platform: IS_MOBILE ? "mobile" : "desktop",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+        locale: nav.language || "",
+        browser: nav.userAgent || "",
+        screen: screen.width + "x" + screen.height,
+        os: nav.platform || "",
+        viewport: window.innerWidth + "x" + window.innerHeight,
+        referrer: document.referrer || "",
+        cores: nav.hardwareConcurrency || "",
+        memory: nav.deviceMemory || "",
+        touch: ("ontouchstart" in window) ? "yes" : "no",
+        dpr: window.devicePixelRatio || "",
+        depth: screen.colorDepth || "",
+        dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
+        conn: conn.effectiveType || "",
+        dnt: nav.doNotTrack || ""
+      })
     });
-    if (nav.sendBeacon) {
-      nav.sendBeacon(ANALYTICS_URL, data);
-    } else {
-      fetch(ANALYTICS_URL, { method: "POST", body: data, keepalive: true }).catch(() => {});
-    }
-  } catch (e) { /* silent */ }
+  } catch (e) {}
 }
 
 const ROTATE_MAP = {
