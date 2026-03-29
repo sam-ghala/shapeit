@@ -1,13 +1,26 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 
-const COLS = 10, ROWS = 8, CS = 52, M = 40;
-const GW = COLS * CS, GH = ROWS * CS;
-const EDGE_HIT = 18;
+const IS_MOBILE = typeof window !== "undefined" && window.innerWidth <= 860;
 
-const TOP_L = ["1","2","3","4","5","6","7","8","9","10"];
-const LEFT_L = ["A","B","C","D","E","F","G","H"];
-const RIGHT_L = ["11","12","13","14","15","16","17","18"];
-const BOT_L = ["I","J","K","L","M","N","O","P","Q","R"];
+const COLS = IS_MOBILE ? 7 : 10;
+const ROWS = IS_MOBILE ? 5 : 8;
+const CS = IS_MOBILE ? 46 : 52;
+const M = IS_MOBILE ? 30 : 40;
+const GW = COLS * CS, GH = ROWS * CS;
+const EDGE_HIT = IS_MOBILE ? 20 : 18;
+
+const TOP_L = IS_MOBILE
+  ? ["1","2","3","4","5","6","7"]
+  : ["1","2","3","4","5","6","7","8","9","10"];
+const LEFT_L = IS_MOBILE
+  ? ["A","B","C","D","E"]
+  : ["A","B","C","D","E","F","G","H"];
+const RIGHT_L = IS_MOBILE
+  ? ["8","9","10","11","12"]
+  : ["11","12","13","14","15","16","17","18"];
+const BOT_L = IS_MOBILE
+  ? ["F","G","H","I","J","K","L"]
+  : ["I","J","K","L","M","N","O","P","Q","R"];
 
 const PCOLORS = { red: "#E53935", blue: "#1E88E5", yellow: "#FBC02D", white: "#9E9E9E" };
 const PFILL = {
@@ -27,7 +40,7 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbyZk4sDyhS3bC_5twWyYdxymHlXW0NkpegkjTaFP0QgIOnkHn2WtkGLvx_LpR4E5qob/exec";
+const ANALYTICS_URL = "";
 
 function logSubmission(result, solveTimeSec, queryCount) {
   if (!ANALYTICS_URL) return;
@@ -106,7 +119,7 @@ function computeOutlineEdges(absCells) {
   return edges;
 }
 
-const PIECES = [
+const DESKTOP_PIECES = [
   { id:"wl", color:"white", name:"Lg pyramid",
     cells:[[0,1,"/b"],[0,2,"\\b"],[1,0,"/b"],[1,1,"/f"],[1,2,"\\f"],[1,3,"\\b"]] },
   { id:"bl", color:"blue", name:"Lg pyramid",
@@ -119,10 +132,44 @@ const PIECES = [
     cells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]] },
 ];
 
+const MOBILE_SHAPE_BANK = [
+  { name:"Square", cells:[[0,0,"\\f"]] },
+  { name:"Half", cells:[[0,0,"/"]] },
+  { name:"Half", cells:[[0,0,"\\"]] },
+  { name:"Sm diamond", cells:[[0,0,"/b"],[0,1,"\\b"],[1,0,"\\"],[1,1,"/"]] },
+  { name:"Sm tri", cells:[[0,0,"\\f"],[0,1,"/"],[1,0,"/"]] },
+  { name:"Sm para", cells:[[0,0,"/b"],[0,1,"/"]] },
+  { name:"Sm para", cells:[[0,0,"\\b"],[0,1,"\\"]] },
+  { name:"Tall dia", cells:[[0,0,"/b"],[1,0,"\\"]] },
+  { name:"L shape", cells:[[0,0,"\\f"],[1,0,"/b"],[1,1,"\\b"]] },
+  { name:"Arrow", cells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]] },
+  { name:"Wedge", cells:[[0,0,"\\b"],[0,1,"/b"],[1,1,"\\f"]] },
+  { name:"Stripe", cells:[[0,0,"/f"],[0,1,"/f"]] },
+];
+
+const MOBILE_COLORS = ["red","blue","yellow","white"];
+
+function buildMobilePieces(seed) {
+  const rng = mulberry32(hashSeed(seed + "-mpieces"));
+  const shuffColors = [...MOBILE_COLORS].sort(() => rng() - 0.5);
+  const colors3 = shuffColors.slice(0, 3);
+  const shuffShapes = [...MOBILE_SHAPE_BANK].sort(() => rng() - 0.5);
+  const chosen = shuffShapes.slice(0, 4);
+  const colorAssign = [colors3[0], colors3[1], colors3[2], colors3[Math.floor(rng() * 3)]];
+  return chosen.map((shape, i) => ({
+    id: `m${i}`,
+    color: colorAssign[i],
+    name: shape.name,
+    cells: shape.cells.map(c => [...c]),
+  }));
+}
+
+let PIECES = DESKTOP_PIECES;
+
 function mulberry32(s){let t=s|0;return()=>{t=(t+0x6D2B79F5)|0;let x=Math.imul(t^(t>>>15),1|t);x=(x+Math.imul(x^(x>>>7),61|x))^x;return((x^(x>>>14))>>>0)/4294967296;};}
 function hashSeed(str){let h=0;for(let i=0;i<str.length;i++)h=((h<<5)-h+str.charCodeAt(i))|0;return h;}
-function getDailySeed(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
-function getDayNumber(){return Math.floor((new Date()-new Date(2025,0,1))/86400000)+1;}
+function getDailySeed(){const d=new Date();const base=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;return IS_MOBILE?base+"-m":base;}
+function getDayNumber(){const now=new Date();const start=new Date(now.getFullYear(),0,0);return Math.floor((now-start)/86400000);}
 
 function rotateCells(cells,rot){
   let r=cells.map(([dr,dc,t])=>[dr,dc,t]);
@@ -131,8 +178,30 @@ function rotateCells(cells,rot){
   return r.map(([dr,dc,t])=>[dr-minR,dc-minC,t]);
 }
 
+/*
+ * Reflection logic:
+ * Each half-cell has "flat" sides where the fill touches the cell boundary,
+ * and a diagonal edge. If the laser enters from a flat side, it bounces
+ * straight back. If it enters from the diagonal side, it reflects 90°.
+ *
+ *   "/"  (upper-left filled) → flat: top, left    → diagonal entry: from right, from bottom
+ *   "\"  (upper-right filled)→ flat: top, right   → diagonal entry: from left, from bottom
+ *   "/b" (lower-right filled)→ flat: bottom, right→ diagonal entry: from left, from top
+ *   "\b" (lower-left filled) → flat: bottom, left → diagonal entry: from right, from top
+ *   "/f","\f" (full cell)    → all flat           → always bounce back
+ */
+const FLAT_SIDES = {
+  "/":["top","left"], "\\":["top","right"],
+  "/b":["bottom","right"], "\\b":["bottom","left"],
+  "/f":["top","bottom","left","right"], "\\f":["top","bottom","left","right"]
+};
+const DIR_TO_ENTRY = {right:"left",left:"right",down:"top",up:"bottom"};
+const BOUNCE = {right:"left",left:"right",down:"up",up:"down"};
+
 function reflect(dir,type){
-  if(isFull(type)) return{right:"left",left:"right",down:"up",up:"down"}[dir];
+  const entrySide=DIR_TO_ENTRY[dir];
+  const flat=FLAT_SIDES[type]||[];
+  if(flat.includes(entrySide)) return BOUNCE[dir];
   const d=diagOf(type);
   if(d==="\\") return{right:"down",down:"right",left:"up",up:"left"}[dir];
   return{right:"up",up:"right",left:"down",down:"left"}[dir];
@@ -352,15 +421,15 @@ function HowToPlay({onClose}){
             <span style={{color:c1}}>e</span><span style={{color:c2}}>I</span>
             <span style={{color:c3}}>t</span>
           </div>
-          <div style={{fontSize:14,color:"#888"}}>Find 5 hidden pieces on the grid</div>
+          <div style={{fontSize:14,color:"#888"}}>Find {PIECES.length} hidden pieces on the grid</div>
           <div style={{display:"flex",gap:6,justifyContent:"center",marginTop:8}}>
-            {dot(c1,14)}{dot(c2,14)}{dot(c3,14)}{dot(c4,14)}{dot(c4,14)}
+            {PIECES.map((pc,i)=>dot(PCOLORS[pc.color],14))}
           </div>
         </div>
 
         {/* ── STEP 1: THE PIECES ── */}
-        <div style={sec}>{dot(c1,12)}{dot(c2,12)}{dot(c3,12)} The 5 hidden pieces</div>
-        <p style={p}>Each puzzle hides these 5 colored pieces somewhere on the 10×8 grid. Your job is to find exactly where each one is.</p>
+        <div style={sec}>{dot(c1,12)}{dot(c2,12)}{dot(c3,12)} The {PIECES.length} hidden pieces</div>
+        <p style={p}>Each puzzle hides these {PIECES.length} colored pieces somewhere on the {COLS}x{ROWS} grid. Your job is to find exactly where each one is.</p>
         <div style={{...fig,flexDirection:"row",flexWrap:"wrap",gap:16}}>
           {PIECES.map(pc=>(
             <div key={pc.id}style={{textAlign:"center"}}>
@@ -480,7 +549,7 @@ function HowToPlay({onClose}){
 
         {/* ── STEP 5: SUBMITTING ── */}
         <div style={sec}>{dot(c4,12)} Submit when ready</div>
-        <p style={p}>Once you've placed all 5 pieces, hit <span style={{background:"#1E88E5",color:"white",
+        <p style={p}>Once you've placed all {PIECES.length} pieces, hit <span style={{background:"#1E88E5",color:"white",
           padding:"2px 10px",borderRadius:4,fontSize:13,fontWeight:600}}>Submit solution</span>. 
           Every piece must be in the <em>exact</em> correct position to win.</p>
 
@@ -528,7 +597,10 @@ function HowToPlay({onClose}){
 /* ─── Main Game ─── */
 export default function ShapeIt(){
   const[puzzleSeed,setPuzzleSeed]=useState(getDailySeed());
-  const puzzle=useMemo(()=>generatePuzzle(puzzleSeed),[puzzleSeed]);
+  const puzzle=useMemo(()=>{
+    if(IS_MOBILE) PIECES=buildMobilePieces(puzzleSeed);
+    return generatePuzzle(puzzleSeed);
+  },[puzzleSeed]);
   const[selColor,setSelColor]=useState("red");
   const[guess,setGuess]=useState(()=>Array.from({length:ROWS},()=>Array(COLS).fill(null)));
   const[history,setHistory]=useState([]);
@@ -590,7 +662,7 @@ export default function ShapeIt(){
       if(matchIndices.length>0){
         setHighlightRow(matchIndices);
         setActiveLabels({keys:highlightKeys});
-        setTimeout(()=>{setHighlightRow(null);setActiveLabels(null);},2000);
+        setTimeout(()=>{setHighlightRow(null);setActiveLabels(null);},4000);
       }
       return;
     }
@@ -602,7 +674,7 @@ export default function ShapeIt(){
     if(shuffled.length>0)setSelColor(shuffled[0]);
     setActiveLabels({entry:entryKey,exit:exitKey});
     setUsedLabels(prev=>{const next=new Set(prev);next.add(entryKey);next.add(exitKey);return next;});
-    setTimeout(()=>{setActiveLabels(null);},1800);
+    setTimeout(()=>{setActiveLabels(null);},3800);
   },[puzzle,gameOver,celebrating,usedLabels,history]);
 
   const handleEdgeClick=useCallback((key)=>{
@@ -894,7 +966,7 @@ export default function ShapeIt(){
           <button onClick={()=>setShowHowTo(true)}style={{padding:"6px 14px",fontSize:12,
             fontWeight:500,borderRadius:8,cursor:"pointer",background:TH.gridBg,
             color:TH.textSecondary,border:`1px solid ${TH.gridLine}`}}>How to play</button>
-          <span style={{fontSize:13,color:TH.textTertiary}}>Day #{getDayNumber()}</span>
+          <span style={{fontSize:13,color:TH.textTertiary}}>Day {getDayNumber()}</span>
         </div>
       </div>
 
