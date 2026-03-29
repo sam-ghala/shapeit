@@ -1,0 +1,30 @@
+* {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f5f5f5;
+  color: #212121;
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 860px) {
+  .desktop-layout {
+    flex-direction: column !important;
+    align-items: center !important;
+    padding: 12px 8px !important;
+    gap: 16px !important;
+  }
+
+  .side-panel {
+    width: 100% !important;
+    max-width: 600px !important;
+  }
+
+  /* Reorder: title+pieces first, board second, colors+actions third, log fourth */
+  .desktop-layout > div:nth-child(1) { order: 1; } /* left panel: pieces + colors */
+  .desktop-layout > div:nth-child(2) { order: 2; } /* board */
+  .desktop-layout > div:nth-child(3) { order: 3; } /* query log */
+}
