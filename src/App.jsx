@@ -40,37 +40,37 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycbyGgPXi8Ga6l4yI3kKvycbkDVU2B1YpvsB5KKKTBLmP2uFp7cPddOEZDtrN75fsQluA/exec";
+const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycby1NNts4_MQjojHrcFCKto59u3vIaSuaBcC6tlHb9ULfSg1Rhc2IZgyJZtFYgn7c-oL/exec";
 
-function logSubmission() {
-  // try {
-  //   var nav = navigator;
-  //   var conn = nav.connection || nav.mozConnection || nav.webkitConnection || {};
-  //   var timeStr = solveTimeSec != null
-  //     ? Math.floor(solveTimeSec/60) + ":" + String(solveTimeSec%60).padStart(2,"0")
-  //     : "";
-  //   navigator.sendBeacon("/api/log", JSON.stringify({
-  //     result: result,
-  //     solveTime: timeStr,
-  //     queries: queryCount,
-  //     platform: IS_MOBILE ? "mobile" : "desktop",
-  //     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-  //     locale: nav.language || "",
-  //     browser: nav.userAgent || "",
-  //     screen: screen.width + "x" + screen.height,
-  //     os: nav.platform || "",
-  //     viewport: window.innerWidth + "x" + window.innerHeight,
-  //     referrer: document.referrer || "",
-  //     cores: String(nav.hardwareConcurrency || ""),
-  //     memory: String(nav.deviceMemory || ""),
-  //     touch: ("ontouchstart" in window) ? "yes" : "no",
-  //     dpr: String(window.devicePixelRatio || ""),
-  //     depth: String(screen.colorDepth || ""),
-  //     dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
-  //     connection: conn.effectiveType || "",
-  //     dnt: nav.doNotTrack || ""
-  //   }));
-  // } catch (e) {}
+function logSubmission(result, solveTimeSec, queryCount) {
+  try {
+    var nav = navigator;
+    var conn = nav.connection || nav.mozConnection || nav.webkitConnection || {};
+    var timeStr = solveTimeSec != null
+      ? Math.floor(solveTimeSec/60) + ":" + String(solveTimeSec%60).padStart(2,"0")
+      : "";
+    navigator.sendBeacon("/api/log", JSON.stringify({
+      result: result,
+      solveTime: timeStr,
+      queries: queryCount,
+      platform: IS_MOBILE ? "mobile" : "desktop",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      locale: nav.language || "",
+      browser: nav.userAgent || "",
+      screen: screen.width + "x" + screen.height,
+      os: nav.platform || "",
+      viewport: window.innerWidth + "x" + window.innerHeight,
+      referrer: document.referrer || "",
+      cores: String(nav.hardwareConcurrency || ""),
+      memory: String(nav.deviceMemory || ""),
+      touch: ("ontouchstart" in window) ? "yes" : "no",
+      dpr: String(window.devicePixelRatio || ""),
+      depth: String(screen.colorDepth || ""),
+      dark: window.matchMedia("(prefers-color-scheme:dark)").matches ? "yes" : "no",
+      connection: conn.effectiveType || "",
+      dnt: nav.doNotTrack || ""
+    }));
+  } catch (e) {}
 }
 
 const ROTATE_MAP = {

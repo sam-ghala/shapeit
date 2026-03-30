@@ -1,5 +1,7 @@
 name = "shapeit"
 compatibility_date = "2026-03-29"
+main = "src/worker.js"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
