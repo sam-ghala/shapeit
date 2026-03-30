@@ -1115,15 +1115,23 @@ function CelebrationOverlay({queries,solveTime,onClose}){
         <div style={{fontSize:15,color:"#666",marginTop:4}}>
           with {queries} {queries===1?"query":"queries"}
         </div>
-        <button onClick={()=>{
-          const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
-          if(navigator.clipboard){navigator.clipboard.writeText(text).catch(()=>{});}
-          setCopied(true);setTimeout(()=>setCopied(false),2000);
-          if(navigator.share){navigator.share({text:text}).catch(()=>{});}
-        }}style={{marginTop:16,padding:"10px 28px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
-          background:copied?"#4CAF50":"#1E88E5",color:"#fff",border:"none",transition:"background 0.2s"}}>
-          {copied?"Copied!":"Share result"}
-        </button>
+        <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:16}}>
+          <button onClick={()=>{
+            const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
+            if(navigator.share){navigator.share({text:text}).catch(()=>{});}
+          }}style={{padding:"10px 28px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
+            background:"#1E88E5",color:"#fff",border:"none"}}>
+            Share result
+          </button>
+          <button onClick={()=>{
+            const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
+            if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});}
+          }}style={{padding:"10px 14px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
+            background:copied?"#4CAF50":"#e0e0e0",color:copied?"#fff":"#666",border:"none",
+            transition:"all 0.2s",display:"flex",alignItems:"center",gap:6}}>
+            {copied?<>✓ Copied</>:<><svg width="16"height="16"viewBox="0 0 24 24"fill="none"stroke="currentColor"strokeWidth="2"strokeLinecap="round"strokeLinejoin="round"><rect x="9"y="9"width="13"height="13"rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</>}
+          </button>
+        </div>
       </div>
     </div>
   </>);
