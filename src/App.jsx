@@ -39,8 +39,6 @@ const TH = {
   infoBg: "rgba(30,136,229,0.10)"
 };
 
-// PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-// const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycby1NNts4_MQjojHrcFCKto59u3vIaSuaBcC6tlHb9ULfSg1Rhc2IZgyJZtFYgn7c-oL/exec";
 function logSubmission(result, solveTimeSec, queryCount) {
   try {
     var nav = navigator;
@@ -170,18 +168,6 @@ function rotateCells(cells,rot){
   return r.map(([dr,dc,t])=>[dr-minR,dc-minC,t]);
 }
 
-/*
- * Reflection logic:
- * Each half-cell has "flat" sides where the fill touches the cell boundary,
- * and a diagonal edge. If the laser enters from a flat side, it bounces
- * straight back. If it enters from the diagonal side, it reflects 90°.
- *
- *   "/"  (upper-left filled) → flat: top, left    → diagonal entry: from right, from bottom
- *   "\"  (upper-right filled)→ flat: top, right   → diagonal entry: from left, from bottom
- *   "/b" (lower-right filled)→ flat: bottom, right→ diagonal entry: from left, from top
- *   "\b" (lower-left filled) → flat: bottom, left → diagonal entry: from right, from top
- *   "/f","\f" (full cell)    → all flat           → always bounce back
- */
 const FLAT_SIDES = {
   "/":["top","left"], "\\":["top","right"],
   "/b":["bottom","right"], "\\b":["bottom","left"],
@@ -263,7 +249,6 @@ function generatePuzzle(seed){
     }
     if(allPlaced) return{board,placed};
   }
-  // Last resort fallback (should never reach here)
   const rng=mulberry32(hashSeed(seed));
   const board=Array.from({length:ROWS},()=>Array(COLS).fill(null));
   return{board,placed:[]};
@@ -347,7 +332,6 @@ function PiecePreview({piece,found,size=22}){
   return(
     <svg width={w}height={h}viewBox={`0 0 ${w} ${h}`}
       style={{opacity:found?0.15:1,flexShrink:0}}>
-      {/* Grid background */}
       <rect x={p}y={p}width={maxC*size}height={maxR*size}fill="#f8f8f8"rx={2}/>
       {Array.from({length:maxC+1},(_,i)=>(
         <line key={`gv${i}`}x1={p+i*size}y1={p}x2={p+i*size}y2={p+maxR*size}
@@ -357,16 +341,13 @@ function PiecePreview({piece,found,size=22}){
         <line key={`gh${i}`}x1={p}y1={p+i*size}x2={p+maxC*size}y2={p+i*size}
           stroke="#ddd"strokeWidth={i===0||i===maxR?1:0.5}/>
       ))}
-      {/* Piece fill */}
       {cells.map(([r,c,t],i)=>(
         <polygon key={i}points={fillPoints(p+c*size,p+r*size,size,t)}fill={PFILL[piece.color]}/>
       ))}
-      {/* Diagonal outlines */}
       {cells.filter(([,,t])=>!isFull(t)).map(([r,c,t],i)=>{
         const dl=diagLine(p+c*size,p+r*size,size,t);
         return<line key={`d${i}`}{...dl}stroke={PCOLORS[piece.color]}strokeWidth={1.5}strokeLinecap="round"/>;
       })}
-      {/* H/V outlines */}
       {outEdges.map((ek,i)=>{
         const[kind,aStr,bStr]=ek.split("-");
         const a=parseInt(aStr),b=parseInt(bStr);
@@ -427,7 +408,6 @@ function HowToPlay({onClose}){
           </div>
         </div>
 
-        {/* ── STEP 1: THE PIECES ── */}
         <div style={sec}>{dot(c1,12)}{dot(c2,12)}{dot(c3,12)} The {PIECES.length} hidden pieces</div>
         <p style={p}>Each puzzle hides these {PIECES.length} colored pieces somewhere on the {COLS}x{ROWS} grid. Your job is to find exactly where each one is.</p>
         <div style={{...fig,flexDirection:"row",flexWrap:"wrap",gap:16}}>
@@ -438,7 +418,6 @@ function HowToPlay({onClose}){
           ))}
         </div>
 
-        {/* ── STEP 2: FIRING LASERS ── */}
         <div style={sec}>{dot(c2,12)} Fire lasers to gather clues</div>
         <p style={p}>Click any label around the grid (1–10, A–H, etc.) to shoot a laser into that row or column. The laser travels in a straight line until it hits a piece edge.</p>
 
@@ -447,12 +426,10 @@ function HowToPlay({onClose}){
           <MiniGrid w={5}h={3}>{(m)=>{
             const h=S/2;
             return<>
-            {/* Yellow right triangle: hypotenuse from (1,3)top-right to (3,3)bottom-left, vertical right edge, horizontal bottom */}
             <polygon points={`${m+3*S},${m+3*S} ${m+5*S},${m+S} ${m+5*S},${m+3*S}`}fill="rgba(251,192,45,0.2)"/>
             <line x1={m+3*S}y1={m+3*S}x2={m+5*S}y2={m+S}stroke={c3}strokeWidth={2.5}/>
             <line x1={m+5*S}y1={m+S}x2={m+5*S}y2={m+3*S}stroke={c3}strokeWidth={2.5}/>
             <line x1={m+5*S}y1={m+3*S}x2={m+3*S}y2={m+3*S}stroke={c3}strokeWidth={2.5}/>
-            {/* Laser: enters col 4 center, goes down to diagonal, bounces left */}
             <line x1={m+3*S+h}y1={m}x2={m+3*S+h}y2={m+2*S+h}stroke={c2}strokeWidth={2}strokeDasharray="5 3"opacity={0.7}/>
             <line x1={m+3*S+h}y1={m+2*S+h}x2={m}y2={m+2*S+h}stroke={c2}strokeWidth={2}strokeDasharray="5 3"opacity={0.7}/>
             <circle cx={m+3*S+h}cy={m+2*S+h}r={3}fill={c2}opacity={0.5}/>
@@ -484,7 +461,6 @@ function HowToPlay({onClose}){
           <div style={{fontSize:12,color:"#888"}}>Laser enters "3" and exits "3", bounced off the flat top of the parallelogram</div>
         </div>
 
-        {/* ── STEP 3: READING THE CLUES ── */}
         <div style={sec}>{dot(c3,12)} Reading the query log</div>
         <p style={p}>After each laser, the log shows the entry point, exit point, and which piece colors the laser passed through (in random order).</p>
 
@@ -505,7 +481,6 @@ function HowToPlay({onClose}){
 
         <p style={p}>Colors appear in random order. You know <em>which</em> colors were hit, but not the sequence. A result with no colors means the laser passed through empty space.</p>
 
-        {/* ── STEP 4: PLACING YOUR GUESS ── */}
         <div style={sec}>{dot(c1,12)} Drawing your guess</div>
         <p style={p}>Select a color, then build piece outlines on the grid:</p>
 
@@ -547,7 +522,6 @@ function HowToPlay({onClose}){
           </div>
         </div>
 
-        {/* ── STEP 5: SUBMITTING ── */}
         <div style={sec}>{dot(c4,12)} Submit when ready</div>
         <p style={p}>Once you've placed all {PIECES.length} pieces, hit <span style={{background:"#1E88E5",color:"white",
           padding:"2px 10px",borderRadius:4,fontSize:13,fontWeight:600}}>Submit solution</span>. 
@@ -576,7 +550,6 @@ function HowToPlay({onClose}){
         </div>
         <p style={{...p,textAlign:"center",fontSize:13,color:"#999"}}>If wrong, the correct answer is shown. One shot, make it count.</p>
 
-        {/* ── TIPS ── */}
         <div style={sec}>{dot(c2,12)} Tips</div>
         <div style={{background:"#f8f8f8",borderRadius:10,padding:"14px 16px",margin:"0 0 16px",fontSize:13,
           lineHeight:1.8,color:"#555"}}>
@@ -625,6 +598,17 @@ export default function ShapeIt(){
     return found;
   },[guess,edgeColors]);
 
+  /* Collect all cells from empty-color laser queries for grey X marks */
+  const emptyCells=useMemo(()=>{
+    const cells=new Set();
+    for(const h of history){
+      if(h.colors.length===0&&h.path){
+        for(const[r,c]of h.path) cells.add(`${r},${c}`);
+      }
+    }
+    return cells;
+  },[history]);
+
   const handleCellClick=useCallback((r,c)=>{
     if(gameOver||celebrating)return;
     setGuess(prev=>{
@@ -670,7 +654,7 @@ export default function ShapeIt(){
     const exitKey=`${result.exitSide}-${result.exitIdx}`;
     const shuffled=[...result.colors].sort(()=>Math.random()-0.5);
     setHistory(prev=>[...prev,{entry:getLabel(side,idx),exit:getLabel(result.exitSide,result.exitIdx),
-      colors:shuffled}]);
+      colors:shuffled,path:result.path}]);
     if(shuffled.length>0)setSelColor(shuffled[0]);
     setActiveLabels({entry:entryKey,exit:exitKey});
     setUsedLabels(prev=>{const next=new Set(prev);next.add(entryKey);next.add(exitKey);return next;});
@@ -735,6 +719,8 @@ export default function ShapeIt(){
   for(let r=0;r<ROWS;r++)for(let line=0;line<=COLS;line++)
     vEdges.push({key:`v-${r}-${line}`,x:gx(line),y:gy(r)});
 
+  const XS = CS * 0.10; // half-size of the X mark
+
   const board=(
     <svg width={GW+2*M}height={GH+2*M}style={{display:"block",maxWidth:"100%",height:"auto"}}
       viewBox={`0 0 ${GW+2*M} ${GH+2*M}`}>
@@ -747,6 +733,16 @@ export default function ShapeIt(){
         <line key={`h${i}`}x1={M}y1={gy(i)}x2={M+GW}y2={gy(i)}
           stroke={TH.gridLine}strokeWidth={i===0||i===ROWS?2:1}/>
       ))}
+
+      {/* Grey X marks for empty laser paths */}
+      {[...emptyCells].map(key=>{
+        const[r,c]=key.split(",").map(Number);
+        const cx=gx(c)+CS/2,cy=gy(r)+CS/2;
+        return<g key={`xm-${key}`}style={{pointerEvents:"none"}}>
+          <line x1={cx-XS}y1={cy-XS}x2={cx+XS}y2={cy+XS}stroke="#ccc"strokeWidth={1.5}strokeLinecap="round"/>
+          <line x1={cx+XS}y1={cy-XS}x2={cx-XS}y2={cy+XS}stroke="#ccc"strokeWidth={1.5}strokeLinecap="round"/>
+        </g>;
+      })}
 
       {/* Game over: reveal solution */}
       {gameOver&&puzzle.placed.map((p,pi)=>(
@@ -946,7 +942,6 @@ export default function ShapeIt(){
     <div style={{fontFamily:"system-ui,-apple-system,sans-serif",color:TH.textPrimary,
       background:TH.bg,minHeight:"100vh"}}>
 
-      {/* New puzzle popup */}
       {newFlash&&<div style={{position:"fixed",inset:0,zIndex:9998,background:"rgba(0,0,0,0.3)",
         display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <style>{`@keyframes flashPop{0%{transform:scale(.8);opacity:0}30%{transform:scale(1.02);opacity:1}100%{transform:scale(1);opacity:1}}`}</style>
@@ -958,7 +953,6 @@ export default function ShapeIt(){
         </div>
       </div>}
 
-      {/* Header */}
       <div className="header-bar"style={{display:"flex",justifyContent:"space-between",alignItems:"center",
         padding:"16px 24px",maxWidth:1100,margin:"0 auto"}}>
         <span style={{fontSize:22,fontWeight:700}}>ShapeIt</span>
@@ -970,11 +964,9 @@ export default function ShapeIt(){
         </div>
       </div>
 
-      {/* Main layout */}
       <div className="game-layout"style={{display:"flex",gap:28,padding:"0 12px 20px",
         alignItems:"flex-start",justifyContent:"center",flexWrap:"wrap"}}>
 
-        {/* LEFT PANEL — colors + buttons (desktop only, mobile reordered via CSS) */}
         <div className="panel-controls"style={{width:160,display:"flex",flexDirection:"column",gap:16,flexShrink:0}}>
           <div>
             <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
@@ -991,7 +983,6 @@ export default function ShapeIt(){
             </div>
           </div>
           <div className="hide-mobile"style={{display:"flex",flexDirection:"column",gap:16}}>
-            {/* Desktop: pieces here */}
             <div>
               <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
                 textTransform:"uppercase",letterSpacing:"0.08em"}}>Pieces</div>
@@ -1023,17 +1014,14 @@ export default function ShapeIt(){
           </div>
         </div>
 
-        {/* BOARD */}
         <div className="panel-board"style={{flexShrink:0}}>
           {board}
         </div>
 
-        {/* QUERY LOG */}
         <div className="panel-log"style={{width:220,minWidth:190,flexShrink:0}}>
           {queryLog}
         </div>
 
-        {/* MOBILE-ONLY: pieces + buttons at bottom */}
         <div className="panel-mobile-bottom"style={{display:"none",width:"100%",maxWidth:600,
           flexDirection:"column",gap:12}}>
           <div>
@@ -1070,7 +1058,6 @@ export default function ShapeIt(){
       {gameOver&&!overlayDismissed&&<GameOverOverlay queries={history.length}
         onNewPuzzle={handleNewPuzzle}onClose={()=>setOverlayDismissed(true)}/>}
 
-      {/* Footer */}
       <div style={{textAlign:"center",padding:"24px 16px 16px",fontSize:12,color:TH.textTertiary}}>
         Authors: <a href="https://robinerb.github.io"style={{color:TH.textSecondary,textDecoration:"none",
           borderBottom:`1px solid ${TH.borderLight}`}}target="_blank"rel="noopener noreferrer">Robin Erb</a> & <a
@@ -1130,7 +1117,9 @@ function CelebrationOverlay({queries,solveTime,onClose}){
         </div>
         <button onClick={()=>{
           const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
-          if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});}
+          if(navigator.clipboard){navigator.clipboard.writeText(text).catch(()=>{});}
+          setCopied(true);setTimeout(()=>setCopied(false),2000);
+          if(navigator.share){navigator.share({text:text}).catch(()=>{});}
         }}style={{marginTop:16,padding:"10px 28px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
           background:copied?"#4CAF50":"#1E88E5",color:"#fff",border:"none",transition:"background 0.2s"}}>
           {copied?"Copied!":"Share result"}
