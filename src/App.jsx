@@ -40,8 +40,7 @@ const TH = {
 };
 
 // PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycby1NNts4_MQjojHrcFCKto59u3vIaSuaBcC6tlHb9ULfSg1Rhc2IZgyJZtFYgn7c-oL/exec";
-
+// const ANALYTICS_URL = "https://script.google.com/macros/s/AKfycby1NNts4_MQjojHrcFCKto59u3vIaSuaBcC6tlHb9ULfSg1Rhc2IZgyJZtFYgn7c-oL/exec";
 function logSubmission(result, solveTimeSec, queryCount) {
   try {
     var nav = navigator;
