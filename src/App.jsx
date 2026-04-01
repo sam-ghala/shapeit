@@ -128,7 +128,31 @@ const DESKTOP_PIECES = [
     cells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]] },
 ];
 
-const MOBILE_SHAPE_BANK = [
+const MIRROR_MAP = {
+  "/":"\\", "\\": "/", "/b":"\\b", "\\b":"/b", "/f":"\\f", "\\f":"/f"
+};
+
+function mirrorCells(cells){
+  const mirrored=cells.map(([r,c,t])=>[r,-c,MIRROR_MAP[t]]);
+  const minC=Math.min(...mirrored.map(c=>c[1]));
+  return mirrored.map(([r,c,t])=>[r,c-minC,t]);
+}
+
+function cellsEqual(a,b){
+  if(a.length!==b.length)return false;
+  const sa=a.map(([r,c,t])=>`${r},${c},${t}`).sort().join("|");
+  const sb=b.map(([r,c,t])=>`${r},${c},${t}`).sort().join("|");
+  return sa===sb;
+}
+
+function hasRotationMatch(orig,target){
+  for(let rot=0;rot<4;rot++){
+    if(cellsEqual(rotateCells(orig,rot),target))return true;
+  }
+  return false;
+}
+
+const MOBILE_SHAPE_BANK_BASE = [
   { name:"Sm diamond", cells:[[0,0,"/b"],[0,1,"\\b"],[1,0,"\\"],[1,1,"/"]] },
   { name:"Sm tri", cells:[[0,0,"\\f"],[0,1,"/"],[1,0,"/"]] },
   { name:"Sm para", cells:[[0,0,"/b"],[0,1,"/"]] },
@@ -136,6 +160,18 @@ const MOBILE_SHAPE_BANK = [
   { name:"Tall dia", cells:[[0,0,"/b"],[1,0,"\\"]] },
   { name:"Arrow", cells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]] },
 ];
+
+// Build bank with reflected versions where mirror is a distinct shape
+const MOBILE_SHAPE_BANK = (()=>{
+  const bank=[...MOBILE_SHAPE_BANK_BASE];
+  for(const shape of MOBILE_SHAPE_BANK_BASE){
+    const mir=mirrorCells(shape.cells);
+    if(!hasRotationMatch(shape.cells,mir)){
+      bank.push({name:shape.name,cells:mir});
+    }
+  }
+  return bank;
+})();
 
 const MOBILE_COLORS = ["red","blue","yellow","white"];
 
@@ -145,7 +181,33 @@ function buildMobilePieces(seed) {
   const colors3 = shuffColors.slice(0, 3);
   const shuffShapes = [...MOBILE_SHAPE_BANK].sort(() => rng() - 0.5);
   const chosen = shuffShapes.slice(0, 4);
-  const colorAssign = [colors3[0], colors3[1], colors3[2], colors3[Math.floor(rng() * 3)]];
+  // Find if diamond is in chosen shapes
+  const diamondIdx = chosen.findIndex(s => s.name === "Sm diamond");
+  let colorAssign;
+  if (diamondIdx >= 0) {
+    // Diamond's color gets the duplicate
+    colorAssign = colors3.slice(0, 3);
+    // Assign first 3 colors to first 3 slots
+    const temp = [colors3[0], colors3[1], colors3[2]];
+    // The 4th piece gets the diamond's color
+    const diamondColor = temp[diamondIdx] !== undefined ? temp[diamondIdx] : colors3[0];
+    colorAssign = [];
+    for (let i = 0; i < 4; i++) {
+      if (i < 3) colorAssign.push(colors3[i]);
+      else colorAssign.push(diamondColor);
+    }
+    // Shuffle so the duplicate isn't always last
+    const paired = chosen.map((s, i) => ({ shape: s, color: colorAssign[i] }));
+    paired.sort(() => rng() - 0.5);
+    return paired.map((p, i) => ({
+      id: `m${i}`,
+      color: p.color,
+      name: p.shape.name,
+      cells: p.shape.cells.map(c => [...c]),
+    }));
+  } else {
+    colorAssign = [colors3[0], colors3[1], colors3[2], colors3[Math.floor(rng() * 3)]];
+  }
   return chosen.map((shape, i) => ({
     id: `m${i}`,
     color: colorAssign[i],
@@ -221,7 +283,8 @@ function generatePuzzle(seed){
       let ok=false;
       for(let att=0;att<1000&&!ok;att++){
         const rot=Math.floor(rng()*4);
-        const cells=rotateCells(piece.cells,rot);
+        const baseCells=rng()>0.5?mirrorCells(piece.cells):piece.cells;
+        const cells=rotateCells(baseCells,rot);
         const rs=cells.map(c=>c[0]),cs=cells.map(c=>c[1]);
         const minR=Math.min(...rs),maxR=Math.max(...rs);
         const minC=Math.min(...cs),maxC=Math.max(...cs);
@@ -255,25 +318,28 @@ function generatePuzzle(seed){
 }
 
 function findMatch(guessBoard,edgeColors,piece){
-  for(let rot=0;rot<4;rot++){
-    const cells=rotateCells(piece.cells,rot);
-    const rs=cells.map(c=>c[0]),cs=cells.map(c=>c[1]);
-    const minR=Math.min(...rs),maxR=Math.max(...rs);
-    const minC=Math.min(...cs),maxC=Math.max(...cs);
-    const norm=cells.map(([r,c,t])=>[r-minR,c-minC,t]);
-    for(let r=0;r<=ROWS-1-(maxR-minR);r++){
-      for(let c=0;c<=COLS-1-(maxC-minC);c++){
-        let ok=true;
-        const absCells=norm.map(([dr,dc,t])=>[r+dr,c+dc,t]);
-        for(const[ar,ac,t]of absCells){
-          if(isFull(t))continue;
-          const g=guessBoard[ar]?.[ac];
-          if(!g||g.color!==piece.color||g.type!==diagOf(t)){ok=false;break;}
+  const variants=[piece.cells,mirrorCells(piece.cells)];
+  for(const baseCells of variants){
+    for(let rot=0;rot<4;rot++){
+      const cells=rotateCells(baseCells,rot);
+      const rs=cells.map(c=>c[0]),cs=cells.map(c=>c[1]);
+      const minR=Math.min(...rs),maxR=Math.max(...rs);
+      const minC=Math.min(...cs),maxC=Math.max(...cs);
+      const norm=cells.map(([r,c,t])=>[r-minR,c-minC,t]);
+      for(let r=0;r<=ROWS-1-(maxR-minR);r++){
+        for(let c=0;c<=COLS-1-(maxC-minC);c++){
+          let ok=true;
+          const absCells=norm.map(([dr,dc,t])=>[r+dr,c+dc,t]);
+          for(const[ar,ac,t]of absCells){
+            if(isFull(t))continue;
+            const g=guessBoard[ar]?.[ac];
+            if(!g||g.color!==piece.color||g.type!==diagOf(t)){ok=false;break;}
+          }
+          if(!ok)continue;
+          const outEdges=computeOutlineEdges(absCells);
+          for(const ek of outEdges){if(edgeColors[ek]!==piece.color){ok=false;break;}}
+          if(ok)return absCells;
         }
-        if(!ok)continue;
-        const outEdges=computeOutlineEdges(absCells);
-        for(const ek of outEdges){if(edgeColors[ek]!==piece.color){ok=false;break;}}
-        if(ok)return absCells;
       }
     }
   }
@@ -358,6 +424,364 @@ function PiecePreview({piece,found,size=22}){
       })}
     </svg>
   );
+}
+
+/* ─── Interactive Training & Example ─── */
+function fireLaserLocal(board,side,idx,cols,rows){
+  let r,c,dir;
+  if(side==="top"){r=0;c=idx;dir="down";}
+  else if(side==="bottom"){r=rows-1;c=idx;dir="up";}
+  else if(side==="left"){r=idx;c=0;dir="right";}
+  else{r=idx;c=cols-1;dir="left";}
+  const colors=new Set();const path=[];let steps=0;
+  while(r>=0&&r<rows&&c>=0&&c<cols&&steps<200){
+    path.push([r,c]);const cell=board[r]?.[c];
+    if(cell){colors.add(cell.color);dir=reflect(dir,cell.type);}
+    if(dir==="down")r++;else if(dir==="up")r--;
+    else if(dir==="right")c++;else c--;steps++;
+  }
+  let exitSide,exitIdx;
+  if(r<0){exitSide="top";exitIdx=c;}
+  else if(r>=rows){exitSide="bottom";exitIdx=c;}
+  else if(c<0){exitSide="left";exitIdx=r;}
+  else{exitSide="right";exitIdx=r;}
+  return{exitSide,exitIdx,colors:[...colors],path};
+}
+
+const TRAIN_COLS=5,TRAIN_ROWS=4;
+const TRAIN_PIECES=[
+  {color:"red",absCells:[[0,0,"/b"],[0,1,"/f"],[0,2,"/"]]},
+  {color:"white",absCells:[[1,1,"/b"],[1,2,"\\b"],[2,1,"\\"],[2,2,"/"]]},
+  {color:"blue",absCells:[[2,3,"\\f"],[2,4,"/"],[3,3,"/"]]},
+];
+function buildTrainBoard(){
+  const b=Array.from({length:TRAIN_ROWS},()=>Array(TRAIN_COLS).fill(null));
+  for(const p of TRAIN_PIECES)for(const[r,c,t]of p.absCells)b[r][c]={color:p.color,type:t};
+  return b;
+}
+const TRAIN_BOARD=buildTrainBoard();
+const TRAIN_TOP=["1","2","3","4","5"],TRAIN_LEFT=["A","B","C","D"],TRAIN_RIGHT=["6","7","8","9"],TRAIN_BOT=["E","F","G","H","I"];
+function trainLabel(side,idx){
+  if(side==="top")return TRAIN_TOP[idx];if(side==="left")return TRAIN_LEFT[idx];
+  if(side==="right")return TRAIN_RIGHT[idx];return TRAIN_BOT[idx];
+}
+
+const EX_COLS=4,EX_ROWS=3;
+const EX_PIECE={id:"ex0",color:"red",name:"Sm tri",cells:[[0,0,"\\f"],[0,1,"/"],[1,0,"/"]]};
+const EX_ABS=[[1,1,"\\f"],[1,2,"/"],[2,1,"/"]];
+function buildExBoard(){
+  const b=Array.from({length:EX_ROWS},()=>Array(EX_COLS).fill(null));
+  for(const[r,c,t]of EX_ABS)b[r][c]={color:"red",type:t};
+  return b;
+}
+const EX_BOARD=buildExBoard();
+
+function TrainingAndExample(){
+  const[mode,setMode]=useState("training");
+  return(<div>
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      <button onClick={()=>setMode("training")}style={{flex:1,padding:"10px 8px",fontSize:13,fontWeight:600,
+        borderRadius:8,cursor:"pointer",border:"none",
+        background:mode==="training"?"#1E88E5":"#f0f0f0",color:mode==="training"?"#fff":"#666"}}>Training</button>
+      <button onClick={()=>setMode("example")}style={{flex:1,padding:"10px 8px",fontSize:13,fontWeight:600,
+        borderRadius:8,cursor:"pointer",border:"none",
+        background:mode==="example"?"#1E88E5":"#f0f0f0",color:mode==="example"?"#fff":"#666"}}>Small example</button>
+    </div>
+    {mode==="training"?<TrainingMode/>:<ExampleMode/>}
+  </div>);
+}
+
+function TrainingMode(){
+  const[log,setLog]=useState([]);
+  const[laserPath,setLaserPath]=useState(null);
+  const[activeEntry,setActiveEntry]=useState(null);
+  const[activeExit,setActiveExit]=useState(null);
+  const Z=36,PM=24;
+  const gw=TRAIN_COLS*Z,gh=TRAIN_ROWS*Z;
+  const gx=c=>PM+c*Z,gy=r=>PM+r*Z;
+
+  const fire=(side,idx)=>{
+    const res=fireLaserLocal(TRAIN_BOARD,side,idx,TRAIN_COLS,TRAIN_ROWS);
+    const shuffled=[...res.colors].sort(()=>Math.random()-0.5);
+    setLaserPath(res.path);
+    const ek=`${side}-${idx}`;
+    setActiveEntry(ek);
+    setActiveExit(`${res.exitSide}-${res.exitIdx}`);
+    setLog(prev=>[...prev,{entry:trainLabel(side,idx),exit:trainLabel(res.exitSide,res.exitIdx),colors:shuffled}]);
+    setTimeout(()=>{setLaserPath(null);setActiveEntry(null);setActiveExit(null);},3000);
+  };
+
+  const buildPolyline=()=>{
+    if(!laserPath||laserPath.length===0)return null;
+    let pts=[];
+    // Entry point on grid edge
+    if(activeEntry){
+      const[s,i]=activeEntry.split("-");const ii=parseInt(i);
+      if(s==="top")pts.push(`${gx(ii)+Z/2},${PM}`);
+      else if(s==="left")pts.push(`${PM},${gy(ii)+Z/2}`);
+      else if(s==="right")pts.push(`${PM+gw},${gy(ii)+Z/2}`);
+      else pts.push(`${gx(ii)+Z/2},${PM+gh}`);
+    }
+    // Cell centers for empty cells
+    for(const[r,c]of laserPath) pts.push(`${gx(c)+Z/2},${gy(r)+Z/2}`);
+    // Exit point on grid edge
+    if(activeExit){
+      const[s,i]=activeExit.split("-");const ii=parseInt(i);
+      if(s==="top")pts.push(`${gx(ii)+Z/2},${PM}`);
+      else if(s==="left")pts.push(`${PM},${gy(ii)+Z/2}`);
+      else if(s==="right")pts.push(`${PM+gw},${gy(ii)+Z/2}`);
+      else pts.push(`${gx(ii)+Z/2},${PM+gh}`);
+    }
+    return pts;
+  };
+  const pathPoints=buildPolyline();
+
+  return(<div>
+    <p style={{fontSize:13,color:"#666",margin:"0 0 10px"}}>Click the labels to fire lasers. The laser bounces off piece edges. Watch the query log to see which colors were hit.</p>
+    <div style={{display:"flex",justifyContent:"center",margin:"8px 0"}}>
+      <svg width={gw+PM*2}height={gh+PM*2}viewBox={`0 0 ${gw+PM*2} ${gh+PM*2}`}style={{maxWidth:"100%",height:"auto"}}>
+        <rect x={PM}y={PM}width={gw}height={gh}fill="#fff"/>
+        {Array.from({length:TRAIN_COLS+1},(_,i)=><line key={`v${i}`}x1={gx(i)}y1={PM}x2={gx(i)}y2={PM+gh}stroke="#ddd"strokeWidth={i===0||i===TRAIN_COLS?1.5:0.5}/>)}
+        {Array.from({length:TRAIN_ROWS+1},(_,i)=><line key={`h${i}`}x1={PM}y1={gy(i)}x2={PM+gw}y2={gy(i)}stroke="#ddd"strokeWidth={i===0||i===TRAIN_ROWS?1.5:0.5}/>)}
+
+        {/* Pieces always filled */}
+        {TRAIN_PIECES.map((piece,pi)=><g key={pi}>
+          {piece.absCells.map(([r,c,t],ci)=>
+            <polygon key={ci}points={fillPoints(gx(c),gy(r),Z,t)}fill={PFILL[piece.color]}/>
+          )}
+          {piece.absCells.filter(([,,t])=>!isFull(t)).map(([r,c,t],ci)=>{
+            const dl=diagLine(gx(c),gy(r),Z,t);
+            return<line key={`d${ci}`}{...dl}stroke={PCOLORS[piece.color]}strokeWidth={1.5}strokeLinecap="round"/>;
+          })}
+          {computeOutlineEdges(piece.absCells).map((ek,ei)=>{
+            const[kind,aStr,bStr]=ek.split("-");const a=parseInt(aStr),b=parseInt(bStr);
+            const ln=kind==="h"?{x1:gx(b),y1:gy(a),x2:gx(b)+Z,y2:gy(a)}:{x1:gx(b),y1:gy(a),x2:gx(b),y2:gy(a)+Z};
+            return<line key={`e${ei}`}{...ln}stroke={PCOLORS[piece.color]}strokeWidth={1.5}strokeLinecap="round"/>;
+          })}
+        </g>)}
+
+        {/* Laser path */}
+        {pathPoints&&<polyline points={pathPoints.join(" ")}fill="none"stroke="#1E88E5"strokeWidth={2}strokeDasharray="5 3"opacity={0.7}/>}
+
+        {/* Labels - never greyed out */}
+        {TRAIN_TOP.map((l,i)=>{const k=`top-${i}`;const a=activeEntry===k||activeExit===k;
+          return<g key={`t${i}`}>
+            <rect x={gx(i)}y={0}width={Z}height={PM-2}fill="transparent"style={{cursor:"pointer"}}onClick={()=>fire("top",i)}/>
+            {a&&<circle cx={gx(i)+Z/2}cy={PM/2}r={12}fill="rgba(30,136,229,0.15)"/>}
+            <text x={gx(i)+Z/2}y={PM/2}textAnchor="middle"dominantBaseline="central"fontSize={11}fontWeight={a?700:500}
+              fill={a?"#1E88E5":"#666"}style={{pointerEvents:"none",userSelect:"none"}}>{l}</text>
+          </g>;})}
+        {TRAIN_BOT.map((l,i)=>{const k=`bottom-${i}`;const a=activeEntry===k||activeExit===k;
+          return<g key={`b${i}`}>
+            <rect x={gx(i)}y={PM+gh+2}width={Z}height={PM-2}fill="transparent"style={{cursor:"pointer"}}onClick={()=>fire("bottom",i)}/>
+            {a&&<circle cx={gx(i)+Z/2}cy={PM+gh+PM/2}r={12}fill="rgba(30,136,229,0.15)"/>}
+            <text x={gx(i)+Z/2}y={PM+gh+PM/2}textAnchor="middle"dominantBaseline="central"fontSize={11}fontWeight={a?700:500}
+              fill={a?"#1E88E5":"#666"}style={{pointerEvents:"none",userSelect:"none"}}>{l}</text>
+          </g>;})}
+        {TRAIN_LEFT.map((l,i)=>{const k=`left-${i}`;const a=activeEntry===k||activeExit===k;
+          return<g key={`l${i}`}>
+            <rect x={0}y={gy(i)}width={PM-2}height={Z}fill="transparent"style={{cursor:"pointer"}}onClick={()=>fire("left",i)}/>
+            {a&&<circle cx={PM/2}cy={gy(i)+Z/2}r={12}fill="rgba(30,136,229,0.15)"/>}
+            <text x={PM/2}y={gy(i)+Z/2}textAnchor="middle"dominantBaseline="central"fontSize={11}fontWeight={a?700:500}
+              fill={a?"#1E88E5":"#666"}style={{pointerEvents:"none",userSelect:"none"}}>{l}</text>
+          </g>;})}
+        {TRAIN_RIGHT.map((l,i)=>{const k=`right-${i}`;const a=activeEntry===k||activeExit===k;
+          return<g key={`r${i}`}>
+            <rect x={PM+gw+2}y={gy(i)}width={PM-2}height={Z}fill="transparent"style={{cursor:"pointer"}}onClick={()=>fire("right",i)}/>
+            {a&&<circle cx={PM+gw+PM/2}cy={gy(i)+Z/2}r={12}fill="rgba(30,136,229,0.15)"/>}
+            <text x={PM+gw+PM/2}y={gy(i)+Z/2}textAnchor="middle"dominantBaseline="central"fontSize={11}fontWeight={a?700:500}
+              fill={a?"#1E88E5":"#666"}style={{pointerEvents:"none",userSelect:"none"}}>{l}</text>
+          </g>;})}
+      </svg>
+    </div>
+    <div style={{fontSize:12,color:"#999",marginBottom:4,fontWeight:600}}>QUERY LOG</div>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginBottom:8}}>
+      <thead><tr style={{borderBottom:"1.5px solid #ddd"}}>
+        {["#","In","Out","Colors"].map(h=><th key={h}style={{textAlign:"left",padding:"4px 6px",color:"#aaa",fontSize:11}}>{h}</th>)}
+      </tr></thead>
+      <tbody>{log.length===0?<tr><td colSpan={4}style={{padding:"10px 6px",color:"#ccc",fontSize:12}}>Click a label to fire</td></tr>:
+        log.map((h,i)=><tr key={i}style={{borderBottom:"1px solid #eee"}}>
+          <td style={{padding:"4px 6px",color:"#bbb"}}>{i+1}</td>
+          <td style={{padding:"4px 6px",fontWeight:600}}>{h.entry}</td>
+          <td style={{padding:"4px 6px",fontWeight:600}}>{h.exit}</td>
+          <td style={{padding:"4px 6px"}}>{h.colors.length===0?<span style={{color:"#ccc"}}>none</span>:
+            <div style={{display:"flex",gap:3}}>{h.colors.map((col,j)=>
+              <div key={j}style={{width:12,height:12,borderRadius:"50%",background:PCOLORS[col],
+                border:col==="white"?"1.5px solid #ccc":"none"}}/>)}</div>}</td>
+        </tr>)}</tbody>
+    </table>
+    <p style={{fontSize:12,color:"#aaa",margin:0}}>Click any label as many times as you want. Colors appear in random order.</p>
+  </div>);
+}
+
+function ExampleMode(){
+  const[guess,setGuess]=useState(()=>Array.from({length:EX_ROWS},()=>Array(EX_COLS).fill(null)));
+  const[edgeColors,setEdgeColors]=useState({});
+  const[selColor,setSelColor]=useState("red");
+  const[solved,setSolved]=useState(false);
+  const[log,setLog]=useState([]);
+  const[activeEntry,setActiveEntry]=useState(null);
+  const[activeExit,setActiveExit]=useState(null);
+  const[usedLabels,setUsedLabels]=useState(new Set());
+  const Z=40,PM=24;
+  const gw=EX_COLS*Z,gh=EX_ROWS*Z;
+  const gx=c=>PM+c*Z,gy=r=>PM+r*Z;
+  const EHIT=14;
+  const EX_TOP=["1","2","3","4"],EX_LEFT=["A","B","C"],EX_RIGHT=["5","6","7"],EX_BOT=["D","E","F","G"];
+  const exLabel=(side,idx)=>{
+    if(side==="top")return EX_TOP[idx];if(side==="left")return EX_LEFT[idx];
+    if(side==="right")return EX_RIGHT[idx];return EX_BOT[idx];
+  };
+
+  const exOutline=useMemo(()=>computeOutlineEdges(EX_ABS),[]);
+  const isSolved=useMemo(()=>{
+    for(const[r,c,t]of EX_ABS){
+      if(isFull(t))continue;
+      const g=guess[r]?.[c];
+      if(!g||g.color!=="red"||g.type!==diagOf(t))return false;
+    }
+    for(const ek of exOutline){if(edgeColors[ek]!=="red")return false;}
+    return true;
+  },[guess,edgeColors,exOutline]);
+
+  useEffect(()=>{if(isSolved&&!solved)setSolved(true);},[isSolved,solved]);
+
+  const fireLaser=(side,idx)=>{
+    if(solved)return;
+    const key=`${side}-${idx}`;
+    if(usedLabels.has(key))return;
+    const res=fireLaserLocal(EX_BOARD,side,idx,EX_COLS,EX_ROWS);
+    const shuffled=[...res.colors].sort(()=>Math.random()-0.5);
+    setLog(prev=>[...prev,{entry:exLabel(side,idx),exit:exLabel(res.exitSide,res.exitIdx),colors:shuffled}]);
+    setActiveEntry(key);
+    setActiveExit(`${res.exitSide}-${res.exitIdx}`);
+    setUsedLabels(prev=>{const n=new Set(prev);n.add(key);n.add(`${res.exitSide}-${res.exitIdx}`);return n;});
+    setTimeout(()=>{setActiveEntry(null);setActiveExit(null);},3000);
+  };
+
+  const clickCell=(r,c)=>{
+    if(solved)return;
+    setGuess(prev=>{
+      const next=prev.map(row=>[...row]);const cur=next[r][c];
+      if(!cur)next[r][c]={color:selColor,type:"\\"};
+      else if(cur.color===selColor&&cur.type==="\\")next[r][c]={color:selColor,type:"/"};
+      else if(cur.color===selColor&&cur.type==="/")next[r][c]=null;
+      else next[r][c]={color:selColor,type:"\\"};
+      return next;
+    });
+  };
+  const clickEdge=(key)=>{
+    if(solved)return;
+    setEdgeColors(prev=>{const n={...prev};if(n[key]===selColor)delete n[key];else n[key]=selColor;return n;});
+  };
+
+  const hEdges=[];
+  for(let line=0;line<=EX_ROWS;line++)for(let c=0;c<EX_COLS;c++)hEdges.push({key:`h-${line}-${c}`,x:gx(c),y:gy(line)});
+  const vEdges=[];
+  for(let r=0;r<EX_ROWS;r++)for(let line=0;line<=EX_COLS;line++)vEdges.push({key:`v-${r}-${line}`,x:gx(line),y:gy(r)});
+
+  const renderLabels=(labels,side,isRow)=>labels.map((l,i)=>{
+    const k=`${side}-${i}`;const a=activeEntry===k||activeExit===k;const u=usedLabels.has(k);
+    let x,y,w,h;
+    if(side==="top"){x=gx(i);y=0;w=Z;h=PM-2;}
+    else if(side==="bottom"){x=gx(i);y=PM+gh+2;w=Z;h=PM-2;}
+    else if(side==="left"){x=0;y=gy(i);w=PM-2;h=Z;}
+    else{x=PM+gw+2;y=gy(i);w=PM-2;h=Z;}
+    const cx=side==="left"?PM/2:side==="right"?PM+gw+PM/2:gx(i)+Z/2;
+    const cy=side==="top"?PM/2:side==="bottom"?PM+gh+PM/2:gy(i)+Z/2;
+    return<g key={`${side}${i}`}>
+      <rect x={x}y={y}width={w}height={h}fill="transparent"style={{cursor:solved?"default":"pointer"}}onClick={()=>fireLaser(side,i)}/>
+      {a&&<circle cx={cx}cy={cy}r={12}fill="rgba(30,136,229,0.15)"/>}
+      <text x={cx}y={cy}textAnchor="middle"dominantBaseline="central"fontSize={11}fontWeight={a?700:500}
+        fill={a?"#1E88E5":u?"#ccc":"#666"}style={{pointerEvents:"none",userSelect:"none"}}>{l}</text>
+    </g>;
+  });
+
+  return(<div>
+    <p style={{fontSize:13,color:"#666",margin:"0 0 10px"}}>Find the hidden red triangle. Fire lasers and draw its outline using diagonals and edges.</p>
+    <div style={{display:"flex",gap:16,alignItems:"center",justifyContent:"center",flexWrap:"wrap",margin:"8px 0"}}>
+      <svg width={gw+PM*2}height={gh+PM*2}viewBox={`0 0 ${gw+PM*2} ${gh+PM*2}`}style={{maxWidth:"100%",height:"auto"}}>
+        <rect x={PM}y={PM}width={gw}height={gh}fill="#fff"/>
+        {Array.from({length:EX_COLS+1},(_,i)=><line key={`v${i}`}x1={gx(i)}y1={PM}x2={gx(i)}y2={PM+gh}stroke="#ddd"strokeWidth={i===0||i===EX_COLS?1.5:0.5}/>)}
+        {Array.from({length:EX_ROWS+1},(_,i)=><line key={`h${i}`}x1={PM}y1={gy(i)}x2={PM+gw}y2={gy(i)}stroke="#ddd"strokeWidth={i===0||i===EX_ROWS?1.5:0.5}/>)}
+
+        {solved&&EX_ABS.map(([r,c,t],i)=><polygon key={i}points={fillPoints(gx(c),gy(r),Z,t)}fill={PFILL.red}/>)}
+
+        {guess.map((row,r)=>row.map((cell,c)=>{
+          if(!cell)return null;
+          const x=gx(c),y=gy(r);const dl=diagLine(x,y,Z,cell.type);
+          return<line key={`g${r}-${c}`}{...dl}stroke={PCOLORS[cell.color]}strokeWidth={2.5}strokeLinecap="round"/>;
+        }))}
+
+        {hEdges.map(({key,x,y})=>{const ec=edgeColors[key];if(!ec)return null;
+          return<line key={`ec-${key}`}x1={x}y1={y}x2={x+Z}y2={y}stroke={PCOLORS[ec]}strokeWidth={3}strokeLinecap="round"/>;
+        })}
+        {vEdges.map(({key,x,y})=>{const ec=edgeColors[key];if(!ec)return null;
+          return<line key={`ec-${key}`}x1={x}y1={y}x2={x}y2={y+Z}stroke={PCOLORS[ec]}strokeWidth={3}strokeLinecap="round"/>;
+        })}
+
+        {solved&&exOutline.map((ek,i)=>{
+          const[kind,aStr,bStr]=ek.split("-");const a=parseInt(aStr),b=parseInt(bStr);
+          const ln=kind==="h"?{x1:gx(b),y1:gy(a),x2:gx(b)+Z,y2:gy(a)}:{x1:gx(b),y1:gy(a),x2:gx(b),y2:gy(a)+Z};
+          return<line key={`so${i}`}{...ln}stroke={PCOLORS.red}strokeWidth={3}strokeLinecap="round"/>;
+        })}
+
+        {renderLabels(EX_TOP,"top")}
+        {renderLabels(EX_BOT,"bottom")}
+        {renderLabels(EX_LEFT,"left")}
+        {renderLabels(EX_RIGHT,"right")}
+
+        {!solved&&hEdges.map(({key,x,y})=><rect key={`ht-${key}`}x={x}y={y-EHIT/2}width={Z}height={EHIT}
+          fill="transparent"style={{cursor:"pointer"}}onClick={e=>{e.stopPropagation();clickEdge(key);}}/>)}
+        {!solved&&vEdges.map(({key,x,y})=><rect key={`ht-${key}`}x={x-EHIT/2}y={y}width={EHIT}height={Z}
+          fill="transparent"style={{cursor:"pointer"}}onClick={e=>{e.stopPropagation();clickEdge(key);}}/>)}
+
+        {Array.from({length:EX_ROWS},(_,r)=>Array.from({length:EX_COLS},(_,c)=>
+          <rect key={`cl${r}-${c}`}x={gx(c)+EHIT/2}y={gy(r)+EHIT/2}width={Z-EHIT}height={Z-EHIT}
+            fill="transparent"style={{cursor:solved?"default":"crosshair"}}onClick={()=>clickCell(r,c)}/>
+        ))}
+      </svg>
+
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:11,fontWeight:600,color:"#999",marginBottom:6}}>FIND THIS</div>
+        <div style={{opacity:solved?0.2:1,transition:"opacity 0.5s"}}>
+          <PiecePreview piece={EX_PIECE}found={false}size={28}/>
+        </div>
+      </div>
+    </div>
+
+    {!solved&&<div style={{display:"flex",gap:6,justifyContent:"center",margin:"8px 0"}}>
+      {Object.entries(PCOLORS).map(([name,hex])=>(
+        <button key={name}onClick={()=>setSelColor(name)}style={{
+          width:26,height:26,minWidth:26,minHeight:26,borderRadius:"50%",background:hex,padding:0,flexShrink:0,
+          border:selColor===name?"2.5px solid #212121":"2.5px solid transparent",cursor:"pointer",outline:"none"
+        }}/>
+      ))}
+    </div>}
+
+    {/* Mini query log */}
+    <div style={{fontSize:12,color:"#999",marginBottom:4,fontWeight:600}}>QUERY LOG</div>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginBottom:8}}>
+      <thead><tr style={{borderBottom:"1.5px solid #ddd"}}>
+        {["#","In","Out","Colors"].map(h=><th key={h}style={{textAlign:"left",padding:"4px 6px",color:"#aaa",fontSize:11}}>{h}</th>)}
+      </tr></thead>
+      <tbody>{log.length===0?<tr><td colSpan={4}style={{padding:"10px 6px",color:"#ccc",fontSize:12}}>Click a label to fire</td></tr>:
+        log.map((h,i)=><tr key={i}style={{borderBottom:"1px solid #eee"}}>
+          <td style={{padding:"4px 6px",color:"#bbb"}}>{i+1}</td>
+          <td style={{padding:"4px 6px",fontWeight:600}}>{h.entry}</td>
+          <td style={{padding:"4px 6px",fontWeight:600}}>{h.exit}</td>
+          <td style={{padding:"4px 6px"}}>{h.colors.length===0?<span style={{color:"#ccc"}}>none</span>:
+            <div style={{display:"flex",gap:3}}>{h.colors.map((col,j)=>
+              <div key={j}style={{width:12,height:12,borderRadius:"50%",background:PCOLORS[col],
+                border:col==="white"?"1.5px solid #ccc":"none"}}/>)}</div>}</td>
+        </tr>)}</tbody>
+    </table>
+
+    {solved&&<div style={{textAlign:"center",background:"#e8f5e9",borderRadius:10,padding:"14px 20px",margin:"8px 0"}}>
+      <div style={{fontSize:18,fontWeight:700,color:"#2e7d32"}}>Great, you are ready to play!</div>
+      <div style={{fontSize:12,color:"#66bb6a",marginTop:4}}>You found the red triangle</div>
+    </div>}
+  </div>);
 }
 
 /* ─── How To Play Modal ─── */
@@ -550,6 +974,11 @@ function HowToPlay({onClose}){
         </div>
         <p style={{...p,textAlign:"center",fontSize:13,color:"#999"}}>If wrong, the correct answer is shown. One shot, make it count.</p>
 
+        {/* ── TRY IT ── */}
+        <div style={sec}>{dot(c1,12)} Try it</div>
+        <TrainingAndExample/>
+
+        {/* ── TIPS ── */}
         <div style={sec}>{dot(c2,12)} Tips</div>
         <div style={{background:"#f8f8f8",borderRadius:10,padding:"14px 16px",margin:"0 0 16px",fontSize:13,
           lineHeight:1.8,color:"#555"}}>
@@ -560,7 +989,7 @@ function HowToPlay({onClose}){
         </div>
 
         <div style={{textAlign:"center",fontSize:13,color:"#aaa",marginTop:12}}>
-          A new puzzle every day. Good luck! {dot(c1)}{dot(c2)}{dot(c3)}
+          Good luck! {dot(c1)}{dot(c2)}{dot(c3)}
         </div>
       </div>
     </div>
@@ -570,6 +999,7 @@ function HowToPlay({onClose}){
 /* ─── Main Game ─── */
 export default function ShapeIt(){
   const[puzzleSeed,setPuzzleSeed]=useState(getDailySeed());
+  const[isDaily,setIsDaily]=useState(true);
   const puzzle=useMemo(()=>{
     if(IS_MOBILE) PIECES=buildMobilePieces(puzzleSeed);
     return generatePuzzle(puzzleSeed);
@@ -587,7 +1017,7 @@ export default function ShapeIt(){
   const[hoverEdge,setHoverEdge]=useState(null);
   const[hoverCell,setHoverCell]=useState(null);
   const[highlightRow,setHighlightRow]=useState(null);
-  const[startTime,setStartTime]=useState(()=>Date.now());
+  const[startTime,setStartTime]=useState(null);
   const[solveTime,setSolveTime]=useState(null);
   const[showHowTo,setShowHowTo]=useState(false);
   const[newFlash,setNewFlash]=useState(false);
@@ -611,6 +1041,16 @@ export default function ShapeIt(){
 
   const handleCellClick=useCallback((r,c)=>{
     if(gameOver||celebrating)return;
+    if(selColor==="x"){
+      setGuess(prev=>{
+        const next=prev.map(row=>[...row]);
+        const cur=next[r][c];
+        if(cur&&cur.color==="x") next[r][c]=null;
+        else next[r][c]={color:"x",type:"x"};
+        return next;
+      });
+      return;
+    }
     setGuess(prev=>{
       const next=prev.map(row=>[...row]);const cur=next[r][c];
       if(!cur)next[r][c]={color:selColor,type:"\\"};
@@ -653,16 +1093,45 @@ export default function ShapeIt(){
     const result=fireLaser(puzzle.board,side,idx);
     const exitKey=`${result.exitSide}-${result.exitIdx}`;
     const shuffled=[...result.colors].sort(()=>Math.random()-0.5);
+    // Start timer on first laser
+    if(!startTime)setStartTime(Date.now());
     setHistory(prev=>[...prev,{entry:getLabel(side,idx),exit:getLabel(result.exitSide,result.exitIdx),
       colors:shuffled,path:result.path}]);
     if(shuffled.length>0)setSelColor(shuffled[0]);
+    // If laser hit nothing, mark empty cells with X and clear their edges
+    if(shuffled.length===0&&result.path){
+      setGuess(prev=>{
+        const next=prev.map(row=>[...row]);
+        for(const[r,c]of result.path) next[r][c]={color:"x",type:"x"};
+        return next;
+      });
+      // Determine if this was a row or column laser and clear edges
+      setEdgeColors(prev=>{
+        const next={...prev};
+        if(side==="top"||side==="bottom"){
+          // Column laser: clear horizontal edges and diagonals in those cells
+          for(const[r,c]of result.path){
+            delete next[`h-${r}-${c}`];
+            delete next[`h-${r+1}-${c}`];
+            // Clear guess diagonals too handled above with X
+          }
+        } else {
+          // Row laser: clear vertical edges and diagonals in those cells
+          for(const[r,c]of result.path){
+            delete next[`v-${r}-${c}`];
+            delete next[`v-${r}-${c+1}`];
+          }
+        }
+        return next;
+      });
+    }
     setActiveLabels({entry:entryKey,exit:exitKey});
     setUsedLabels(prev=>{const next=new Set(prev);next.add(entryKey);next.add(exitKey);return next;});
     setTimeout(()=>{setActiveLabels(null);},3800);
-  },[puzzle,gameOver,celebrating,usedLabels,history]);
+  },[puzzle,gameOver,celebrating,usedLabels,history,startTime]);
 
   const handleEdgeClick=useCallback((key)=>{
-    if(gameOver||celebrating)return;
+    if(gameOver||celebrating||selColor==="x")return;
     setEdgeColors(prev=>{const next={...prev};if(next[key]===selColor)delete next[key];else next[key]=selColor;return next;});
   },[selColor,gameOver,celebrating]);
 
@@ -675,11 +1144,13 @@ export default function ShapeIt(){
   const handleNewPuzzle=useCallback(()=>{
     setNewFlash(true);
     setTimeout(()=>{
-      setPuzzleSeed(Date.now().toString());
+      const seed=Date.now().toString();
+      setPuzzleSeed(seed);
+      setIsDaily(false);
       setGuess(Array.from({length:ROWS},()=>Array(COLS).fill(null)));
       setEdgeColors({});setHistory([]);setUsedLabels(new Set());
       setCelebrating(false);setGameOver(false);setSubmitResult(null);
-      setOverlayDismissed(false);setStartTime(Date.now());setSolveTime(null);
+      setOverlayDismissed(false);setStartTime(null);setSolveTime(null);
       setNewFlash(false);
     },400);
   },[]);
@@ -699,7 +1170,7 @@ export default function ShapeIt(){
       for(const ek of outEdges){if(edgeColors[ek]!==color){allCorrect=false;break;}}
       if(!allCorrect)break;
     }
-    const elapsed=Math.floor((Date.now()-startTime)/1000);
+    const elapsed=startTime?Math.floor((Date.now()-startTime)/1000):0;
     if(allCorrect){
       setSolveTime(elapsed);
       setSubmitResult("correct");setCelebrating(true);
@@ -767,6 +1238,13 @@ export default function ShapeIt(){
       {/* Player guess diagonals */}
       {guess.map((row,r)=>row.map((cell,c)=>{
         if(!cell)return null;
+        if(cell.color==="x"){
+          const cx=gx(c)+CS/2,cy=gy(r)+CS/2;
+          return<g key={`gx${r}-${c}`}style={{pointerEvents:"none"}}>
+            <line x1={cx-XS}y1={cy-XS}x2={cx+XS}y2={cy+XS}stroke="#aaa"strokeWidth={2}strokeLinecap="round"/>
+            <line x1={cx+XS}y1={cy-XS}x2={cx-XS}y2={cy+XS}stroke="#aaa"strokeWidth={2}strokeLinecap="round"/>
+          </g>;
+        }
         const isPlaced=Object.values(placedPieces).some(cells=>cells.some(([cr,cc])=>cr===r&&cc===c));
         if(isPlaced)return null;
         const x=gx(c),y=gy(r);const dl=diagLine(x,y,CS,cell.type);
@@ -798,6 +1276,14 @@ export default function ShapeIt(){
       })()}
       {hoverCell&&(()=>{
         const[r,c]=hoverCell;const cur=guess[r]?.[c];
+        if(selColor==="x"){
+          if(cur&&cur.color==="x")return null;
+          const cx=gx(c)+CS/2,cy=gy(r)+CS/2;
+          return<g style={{pointerEvents:"none"}}>
+            <line x1={cx-XS}y1={cy-XS}x2={cx+XS}y2={cy+XS}stroke="#aaa"strokeWidth={2}strokeLinecap="round"opacity={0.3}/>
+            <line x1={cx+XS}y1={cy-XS}x2={cx-XS}y2={cy+XS}stroke="#aaa"strokeWidth={2}strokeLinecap="round"opacity={0.3}/>
+          </g>;
+        }
         let pt="\\";
         if(cur&&cur.color===selColor&&cur.type==="\\")pt="/";
         else if(cur&&cur.color===selColor&&cur.type==="/")return null;
@@ -955,12 +1441,20 @@ export default function ShapeIt(){
 
       <div className="header-bar"style={{display:"flex",justifyContent:"space-between",alignItems:"center",
         padding:"16px 24px",maxWidth:1100,margin:"0 auto"}}>
-        <span style={{fontSize:22,fontWeight:700}}>ShapeIt</span>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontSize:22,fontWeight:700}}>ShapeIt</span>
+          {isDaily?(
+            <span style={{fontSize:12,fontWeight:600,color:"#1E88E5",background:"rgba(30,136,229,0.1)",
+              padding:"3px 10px",borderRadius:6}}>Daily Day {getDayNumber()}</span>
+          ):(
+            <span style={{fontSize:12,fontWeight:500,color:TH.textTertiary,background:TH.borderLight,
+              padding:"3px 10px",borderRadius:6}}>Random #{puzzleSeed.slice(-6)}</span>
+          )}
+        </div>
         <div style={{display:"flex",gap:12,alignItems:"center"}}>
           <button onClick={()=>setShowHowTo(true)}style={{padding:"6px 14px",fontSize:12,
             fontWeight:500,borderRadius:8,cursor:"pointer",background:TH.gridBg,
             color:TH.textSecondary,border:`1px solid ${TH.gridLine}`}}>How to play</button>
-          <span style={{fontSize:13,color:TH.textTertiary}}>Day {getDayNumber()}</span>
         </div>
       </div>
 
@@ -971,15 +1465,22 @@ export default function ShapeIt(){
           <div>
             <div style={{fontSize:11,fontWeight:600,color:TH.textTertiary,marginBottom:8,
               textTransform:"uppercase",letterSpacing:"0.08em"}}>Color</div>
-            <div style={{display:"flex",gap:8}}>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
               {Object.entries(PCOLORS).map(([name,hex])=>(
                 <button key={name}onClick={()=>setSelColor(name)}style={{
-                  width:32,height:32,borderRadius:"50%",background:hex,padding:0,
+                  width:32,height:32,minWidth:32,minHeight:32,borderRadius:"50%",background:hex,padding:0,flexShrink:0,
                   border:selColor===name?`3px solid ${TH.textPrimary}`:"3px solid transparent",
                   cursor:"pointer",outline:"none",
                   boxShadow:selColor===name?`0 0 0 2px ${TH.bg}`:"none"
                 }}/>
               ))}
+              <button onClick={()=>setSelColor("x")}style={{
+                width:32,height:32,minWidth:32,minHeight:32,borderRadius:"50%",background:TH.gridBg,padding:0,flexShrink:0,
+                border:selColor==="x"?`3px solid ${TH.textPrimary}`:"3px solid transparent",
+                cursor:"pointer",outline:"none",fontSize:16,fontWeight:700,color:"#aaa",
+                boxShadow:selColor==="x"?`0 0 0 2px ${TH.bg}`:"none",
+                display:"flex",alignItems:"center",justifyContent:"center"
+              }}>X</button>
             </div>
           </div>
           <div className="hide-mobile"style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -1054,7 +1555,7 @@ export default function ShapeIt(){
 
       {showHowTo&&<HowToPlay onClose={()=>setShowHowTo(false)}/>}
       {celebrating&&!overlayDismissed&&<CelebrationOverlay queries={history.length}
-        solveTime={solveTime}onClose={()=>{setCelebrating(false);setOverlayDismissed(true);}}/>}
+        solveTime={solveTime}onNewPuzzle={handleNewPuzzle}onClose={()=>{setCelebrating(false);setOverlayDismissed(true);}}/>}
       {gameOver&&!overlayDismissed&&<GameOverOverlay queries={history.length}
         onNewPuzzle={handleNewPuzzle}onClose={()=>setOverlayDismissed(true)}/>}
 
@@ -1068,12 +1569,70 @@ export default function ShapeIt(){
   );
 }
 
+/* ─── Scoring ─── */
+function calcTimeScore(seconds){
+  const x=seconds/60; // convert to minutes
+  return 1/(0.005*(x+2));
+}
+function calcQueryScore(x){
+  if(x<=5)return 100;
+  if(x<=10)return 120-4*x;
+  return 80*Math.exp(-0.3*(x-10));
+}
+function calcScore(seconds,queries){
+  return Math.round(calcTimeScore(seconds)*calcQueryScore(queries));
+}
+
 /* ─── Celebration ─── */
 const CELEBRATE_COLORS=["#E53935","#1E88E5","#FBC02D","#9E9E9E"];
 const CELEBRATE_TYPES=["triangle","diamond","square"];
 
-function CelebrationOverlay({queries,solveTime,onClose}){
+function CelebrationOverlay({queries,solveTime,onNewPuzzle,onClose}){
   const[copied,setCopied]=useState(false);
+  const[displayScore,setDisplayScore]=useState(0);
+  const[animDone,setAnimDone]=useState(false);
+  const audioRef=useRef(null);
+  const finalScore=useMemo(()=>calcScore(solveTime||0,queries),[solveTime,queries]);
+  const maxScore=10000;
+  const barPct=Math.min((displayScore/maxScore)*100,100);
+
+  useEffect(()=>{
+    if(finalScore<=0){setAnimDone(true);return;}
+    const duration=2000;
+    const startTime=Date.now();
+    try{
+      const ctx=new(window.AudioContext||window.webkitAudioContext)();
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+      osc.type="sine";
+      osc.frequency.setValueAtTime(220,ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(880,ctx.currentTime+duration/1000);
+      gain.gain.setValueAtTime(0.08,ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.12,ctx.currentTime+duration/1000*0.8);
+      gain.gain.linearRampToValueAtTime(0,ctx.currentTime+duration/1000+0.3);
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+duration/1000+0.3);
+      audioRef.current=ctx;
+      setTimeout(()=>{try{
+        const o2=ctx.createOscillator();const g2=ctx.createGain();
+        o2.type="sine";o2.frequency.value=1047;
+        g2.gain.setValueAtTime(0.15,ctx.currentTime);
+        g2.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.6);
+        o2.connect(g2);g2.connect(ctx.destination);o2.start();o2.stop(ctx.currentTime+0.6);
+      }catch(e){}},duration);
+    }catch(e){}
+    const frame=()=>{
+      const elapsed=Date.now()-startTime;
+      const t=Math.min(elapsed/duration,1);
+      const eased=t<0.5?2*t*t:(1-Math.pow(-2*t+2,2)/2);
+      setDisplayScore(Math.round(eased*finalScore));
+      if(t<1)requestAnimationFrame(frame);
+      else{setDisplayScore(finalScore);setAnimDone(true);}
+    };
+    const timer=setTimeout(()=>requestAnimationFrame(frame),600);
+    return()=>{clearTimeout(timer);if(audioRef.current)try{audioRef.current.close();}catch(e){}};
+  },[finalScore]);
+
   const particles=useMemo(()=>Array.from({length:60},(_,i)=>({
     id:i,type:CELEBRATE_TYPES[i%3],color:CELEBRATE_COLORS[i%4],
     left:Math.random()*100,delay:Math.random()*2.5,duration:2.5+Math.random()*2.5,
@@ -1081,6 +1640,7 @@ function CelebrationOverlay({queries,solveTime,onClose}){
     drift:(Math.random()-0.5)*120,spinAmount:360+Math.random()*720,
   })),[]);
   const timeStr=`${Math.floor((solveTime||0)/60)}:${String((solveTime||0)%60).padStart(2,"0")}`;
+  const shareText=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}\nscore: ${finalScore.toLocaleString()}`;
   return(<>
     <style>{`
       @keyframes sf{0%{transform:translateY(-60px) translateX(0) rotate(0) scale(.3);opacity:0}
@@ -1102,36 +1662,51 @@ function CelebrationOverlay({queries,solveTime,onClose}){
       })}
       <div style={{position:"relative",
         animation:"sb .6s .2s ease-out both",background:"white",borderRadius:16,
-        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:340,margin:16,
+        padding:"28px 32px",maxWidth:"calc(100vw - 32px)",width:360,margin:16,
         boxShadow:"0 8px 40px rgba(0,0,0,.15)",textAlign:"center",pointerEvents:"auto"}}>
         <button onClick={onClose}style={{position:"absolute",top:10,right:14,background:"none",
           border:"none",fontSize:22,color:"#bbb",cursor:"pointer",padding:4}}>✕</button>
         <div style={{fontSize:38,fontWeight:700,marginBottom:4}}>
           {"Solved!".split("").map((ch,i)=><span key={i}style={{color:CELEBRATE_COLORS[i%4]}}>{ch}</span>)}
         </div>
-        <div style={{fontSize:18,color:"#333",marginTop:10,fontWeight:600}}>
-          Solved in {timeStr}
+        <div style={{fontSize:15,color:"#666",marginTop:8}}>
+          {timeStr} with {queries} {queries===1?"query":"queries"}
         </div>
-        <div style={{fontSize:15,color:"#666",marginTop:4}}>
-          with {queries} {queries===1?"query":"queries"}
-        </div>
-        <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:16}}>
+
+        <div style={{margin:"18px auto 6px",width:"100%",maxWidth:240}}>
+          <div style={{fontSize:36,fontWeight:800,color:animDone?"#1E88E5":"#333",
+            transition:"color 0.3s",letterSpacing:"-1px"}}>
+            {displayScore.toLocaleString()}
+          </div>
+          <div style={{width:"100%",height:12,borderRadius:6,background:"#f0f0f0",overflow:"hidden",marginTop:6}}>
+            <div style={{height:"100%",borderRadius:6,
+              width:`${barPct}%`,
+              background:barPct>70?"linear-gradient(90deg,#1E88E5,#FBC02D)":
+                barPct>30?"linear-gradient(90deg,#1E88E5,#42A5F5)":"#1E88E5"
+            }}/>
+          </div>
+          </div>
+
+        <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:14}}>
           <button onClick={()=>{
-            const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
-            if(navigator.share){navigator.share({text:text}).catch(()=>{});}
+            if(navigator.share){navigator.share({text:shareText}).catch(()=>{});}
           }}style={{padding:"10px 28px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
             background:"#1E88E5",color:"#fff",border:"none"}}>
             Share result
           </button>
           <button onClick={()=>{
-            const text=`playshapeit.com 🟥🟦🟨\nsolved in ${timeStr}\nwith ${queries} ${queries===1?"query":"queries"}`;
-            if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});}
+            if(navigator.clipboard){navigator.clipboard.writeText(shareText).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});}
           }}style={{padding:"10px 14px",fontSize:14,fontWeight:600,borderRadius:8,cursor:"pointer",
             background:copied?"#4CAF50":"#e0e0e0",color:copied?"#fff":"#666",border:"none",
             transition:"all 0.2s",display:"flex",alignItems:"center",gap:6}}>
-            {copied?<>✓ Copied</>:<><svg width="16"height="16"viewBox="0 0 24 24"fill="none"stroke="currentColor"strokeWidth="2"strokeLinecap="round"strokeLinejoin="round"><rect x="9"y="9"width="13"height="13"rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</>}
+            {copied?<>&#10003; Copied</>:<><svg width="16"height="16"viewBox="0 0 24 24"fill="none"stroke="currentColor"strokeWidth="2"strokeLinecap="round"strokeLinejoin="round"><rect x="9"y="9"width="13"height="13"rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</>}
           </button>
         </div>
+        <button onClick={onNewPuzzle}style={{marginTop:10,padding:"10px 28px",fontSize:13,fontWeight:500,
+          borderRadius:8,cursor:"pointer",background:"transparent",color:TH.textTertiary,
+          border:`1px solid ${TH.gridLine}`}}>
+          Start new puzzle
+        </button>
       </div>
     </div>
   </>);
