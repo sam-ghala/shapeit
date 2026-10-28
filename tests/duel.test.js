@@ -189,3 +189,24 @@ test("rematch requires both players, keeps room access and alternates the starte
     );
   assert.equal(room.turn, 1 - starter);
 });
+
+test("room options allow either extra independently for both players", () => {
+  for (const extras of [
+    { diamond: true, black: false },
+    { diamond: false, black: true },
+  ]) {
+    const room = createRoom("1234", profiles[0], true, { extras }, 1000);
+    joinRoom(room, profiles[1], false);
+    applyAction(room, 0, { type: "start" }, 2000);
+    for (const p of room.players) {
+      assert.equal(
+        p.pieces.some((x) => x.color === "transparent"),
+        extras.diamond,
+      );
+      assert.equal(
+        p.pieces.some((x) => x.color === "black"),
+        extras.black,
+      );
+    }
+  }
+});

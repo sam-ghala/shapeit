@@ -179,3 +179,31 @@ test("published daily generation fingerprint stays stable", () => {
     "ec8da79567a3b5b9b80308e7d2644c7cfe18b4a9585604ec81d638392519b561",
   );
 });
+
+test("extra pieces can be enabled independently without changing the normal piece selection", () => {
+  const base = buildPieces("extras-independent", "compact", false);
+  for (const extras of [
+    { diamond: true },
+    { black: true },
+    { diamond: true, black: true },
+  ]) {
+    const pieces = buildPieces("extras-independent", "compact", extras);
+    assert.deepEqual(pieces.slice(0, base.length), base);
+    assert.equal(
+      pieces.some((p) => p.color === "transparent"),
+      !!extras.diamond,
+    );
+    assert.equal(
+      pieces.some((p) => p.color === "black"),
+      !!extras.black,
+    );
+    assert.equal(
+      placementError(
+        generatePuzzle("extras-independent", pieces, 7, 5).placed,
+        7,
+        5,
+      ),
+      null,
+    );
+  }
+});

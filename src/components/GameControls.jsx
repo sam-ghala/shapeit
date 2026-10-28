@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { PCOLORS } from "../constants/gameConstants.js";
-import { getLabel } from "../game/engine.js";
+import { getLabel, findMatch } from "../game/engine.js";
 import { PiecePreview } from "./PiecePreview.jsx";
 export function ColorPicker({ pieces, value, onChange, disabled = false }) {
   return (
@@ -22,15 +22,25 @@ export function ColorPicker({ pieces, value, onChange, disabled = false }) {
     </div>
   );
 }
-export function PieceList({ pieces }) {
+export function PieceList({ pieces, guess, edges = {}, onColor }) {
   return (
-    <div className="piece-list">
-      {pieces.map((p) => (
-        <div key={p.id} title={`${p.color} ${p.name}`}>
-          <PiecePreview piece={p} size={18} />
-          <small>{p.name}</small>
-        </div>
-      ))}
+    <div className="piece-list" aria-label="Pieces">
+      {pieces.map((p) => {
+        const placed = !!guess && !!findMatch(guess, edges, p);
+        const label = `${p.color} ${p.name}${placed ? ", placed" : ""}`;
+        return (
+          <button
+            key={p.id}
+            className={`piece-choice ${placed ? "placed" : ""}`}
+            aria-label={label}
+            title={label}
+            onClick={() => onColor?.(p.color)}
+            disabled={!onColor}
+          >
+            <PiecePreview piece={p} size={18} />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -41,11 +51,25 @@ export function QueryLog({
   onSelect,
   selected,
   players = null,
+  selectionVersion = 0,
 }) {
   const list = useRef(null);
   useEffect(() => {
-    if (list.current) list.current.scrollTop = list.current.scrollHeight;
-  }, [history.length]);
+    const container = list.current;
+    if (!container) return;
+    const row = container.children[selected ?? history.length - 1];
+    if (!row) return;
+    const top =
+      row.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop;
+    if (top < container.scrollTop) container.scrollTop = top;
+    else if (
+      top + row.offsetHeight >
+      container.scrollTop + container.clientHeight
+    )
+      container.scrollTop = top + row.offsetHeight - container.clientHeight;
+  }, [history.length, selected, selectionVersion]);
   return (
     <div className="query-log">
       <h3>

@@ -9,7 +9,7 @@ export function nextPencilColor(
   current,
   random = Math.random,
 ) {
-  if (!colors.length) return current;
+  if (!colors.length || colors.includes(current)) return current;
   const unfinished = colors.filter((color) =>
     pieces.some(
       (piece) => piece.color === color && !findMatch(guess, edges, piece),

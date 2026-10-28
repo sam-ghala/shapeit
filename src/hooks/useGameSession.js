@@ -1,3 +1,4 @@
+import { saveResult } from "../game/scores.js";
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   SIZES,
@@ -56,6 +57,7 @@ export function useGameSession(config, profile) {
         profile,
       );
     }
+    if (game.status !== "playing") saveResult(game);
     if (
       game.status !== "playing" &&
       !recorded.current.has(`${game.id}:finish`)
@@ -141,7 +143,7 @@ export function useGameSession(config, profile) {
         status: won ? "won" : "lost",
         startedAt,
         finishedAt: now,
-        score: won && g.timed ? calcScore(seconds, g.history.length) : null,
+        score: won ? calcScore(seconds, g.history.length) : 0,
       };
     });
   return {
@@ -165,11 +167,12 @@ export function useGameSession(config, profile) {
     submit,
     clear: () =>
       edit((g) => ({ ...g, guess: emptyBoard(cols, rows), edges: {} })),
-    newTraining: () =>
+    newTraining: (extras = game.extras) =>
       setGame(
         createSession({
           ...config,
           mode: "training",
+          extras,
         }),
       ),
   };

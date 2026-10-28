@@ -1714,11 +1714,11 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
       </div>
       <details className="advanced-guide">
         <summary>Advanced · scoring, special pieces & duels</summary>
-        <h3>Daily & timed training</h3>
+        <h3>Daily & train mode</h3>
         <p>
-          The clock starts with your first laser or pencil mark. It keeps
-          running when you leave or reload. You get one submission per round.
-          Closing the result never restarts a finished round.
+          The clock starts with your first laser, pencil mark or training hint.
+          It keeps running when you leave or reload. You get one submission per
+          round. Closing the result never restarts a finished round.
         </p>
         <p>
           Your score is the time factor × the laser factor, rounded to the
@@ -1730,9 +1730,9 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
           Example: 2 minutes and 5 lasers = 5,000 points. 2 minutes and 10
           lasers = 4,000. Reopening an existing laser clue costs nothing.
           Training hints reveal an area, a starting cell, then an outline;
-          results using hints are marked assisted. Relaxed training has no
-          score. Daily puzzles reset at 00:00 UTC and are shared by players
-          using the same board size.
+          results using hints have their own personal best list. Daily puzzles
+          reset at 00:00 UTC and are shared by players using the same board
+          size.
         </p>
         <h3>Transparent diamond</h3>
         <p>

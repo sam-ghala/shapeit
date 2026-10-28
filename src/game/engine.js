@@ -1,3 +1,4 @@
+import { normalizeExtras } from "./extras.js";
 import {
   DESKTOP_PIECES,
   ROTATE_MAP,
@@ -300,7 +301,13 @@ export function buildPieces(
       color: colors[i % colors.length],
     }));
   }
-  return extras ? [...pieces, ...EXTRA_PIECES] : pieces;
+  const enabled = normalizeExtras(extras);
+  return [
+    ...pieces,
+    ...EXTRA_PIECES.filter((p) =>
+      p.color === "transparent" ? enabled.diamond : enabled.black,
+    ),
+  ];
 }
 export function boardFromPlaced(placed, cols, rows) {
   const board = emptyBoard(cols, rows);

@@ -27,7 +27,7 @@ test("hit colors choose randomly, excluding shapes completely drawn anywhere", (
       pieces,
       drawn.guess,
       drawn.edges,
-      "blue",
+      "white",
       () => 0.99,
     ),
     "red",
@@ -57,7 +57,7 @@ test("a color stays available while any of its different shapes is incomplete", 
       [...pieces, blueSquare],
       drawn.guess,
       drawn.edges,
-      "red",
+      "white",
       () => 0.99,
     ),
     "blue",
@@ -97,5 +97,35 @@ test("duel device classification does not treat a narrow desktop as a phone", as
       maxTouchPoints: 5,
     }),
     true,
+  );
+});
+
+test("keeps the selected hit color, including when that color is already fully drawn", () => {
+  const drawn = solutionDrawing(
+    [{ ...pieces[1], absCells: [[3, 5, "/"]] }],
+    7,
+    5,
+  );
+  assert.equal(
+    nextPencilColor(
+      ["red", "blue"],
+      pieces,
+      drawn.guess,
+      drawn.edges,
+      "blue",
+      () => 0,
+    ),
+    "blue",
+  );
+  assert.equal(
+    nextPencilColor(
+      ["red", "blue"],
+      pieces,
+      emptyBoard(7, 5),
+      {},
+      "red",
+      () => 0.99,
+    ),
+    "red",
   );
 });

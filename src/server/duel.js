@@ -1,3 +1,4 @@
+import { normalizeExtras } from "../game/extras.js";
 import {
   SIZES,
   SHAPES,
@@ -32,7 +33,7 @@ export function roomSettings(input = {}) {
     : SHAPES.map((s) => s.key);
   return {
     sameShapes: input.sameShapes !== false,
-    extras: input.extras === true,
+    extras: normalizeExtras(input.extras),
     allowed,
   };
 }

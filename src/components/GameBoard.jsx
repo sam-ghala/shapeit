@@ -23,6 +23,7 @@ export function GameBoard({
   onLaser,
   locked = false,
   laserLocked = false,
+  newLaserLocked = false,
   selectedColor = "red",
   activeLaser = null,
   animate = false,
@@ -31,8 +32,20 @@ export function GameBoard({
   queries = [],
   highlight = null,
   hintPiece = null,
+  compare = false,
+  hideNotes = false,
 }) {
   const [focus, setFocus] = useState([0, 0]);
+  const [hover, setHover] = useState(null);
+  const hoverCell = hover ? guess[hover[0]]?.[hover[1]] : null;
+  const previewType =
+    selectedColor === "x"
+      ? null
+      : hoverCell?.color !== selectedColor
+        ? "\\"
+        : hoverCell.type === "\\"
+          ? "/"
+          : null;
   const filled = useMemo(
     () =>
       revealed ??
@@ -127,22 +140,24 @@ export function GameBoard({
           ))}
         </g>
       )}
-      {!revealed &&
+      {(!revealed || compare) &&
         guess.map((row, r) =>
           row.map(
             (cell, c) =>
               cell &&
               (cell.color === "x" ? (
-                <text
-                  key={`${r},${c}`}
-                  x={M + c * Z + Z / 2}
-                  y={M + r * Z + Z / 2 + 5}
-                  textAnchor="middle"
-                  fill="#8c959e"
-                  fontSize="17"
-                >
-                  ×
-                </text>
+                hideNotes ? null : (
+                  <text
+                    key={`${r},${c}`}
+                    x={M + c * Z + Z / 2}
+                    y={M + r * Z + Z / 2 + 5}
+                    textAnchor="middle"
+                    fill="#8c959e"
+                    fontSize="17"
+                  >
+                    ×
+                  </text>
+                )
               ) : (
                 <line
                   key={`${r},${c}`}
@@ -151,23 +166,60 @@ export function GameBoard({
                   strokeDasharray={
                     cell.color === "transparent" ? "5 3" : undefined
                   }
-                  strokeWidth="3"
+                  strokeWidth={compare ? 5 : 3}
+                  opacity={compare ? 0.4 : 1}
                   strokeLinecap="round"
                 />
               )),
           ),
         )}
-      {!revealed &&
+      {(!revealed || compare) &&
         Object.entries(edges).map(([k, color]) => (
           <line
             key={k}
             {...line(k)}
             stroke={PCOLORS[color]}
             strokeDasharray={color === "transparent" ? "5 3" : undefined}
-            strokeWidth="3"
+            strokeWidth={compare ? 5 : 3}
+            opacity={compare ? 0.4 : 1}
             strokeLinecap="round"
           />
         ))}
+      {compare &&
+        revealed &&
+        pieces
+          .map((p) => ({ ...p, absCells: findMatch(guess, edges, p) }))
+          .filter((p) => p.absCells)
+          .map((p) => (
+            <g key={`overlay-${p.id}`} opacity="0.3" pointerEvents="none">
+              {p.absCells.map(([r, c, t], i) => (
+                <polygon
+                  key={i}
+                  points={fillPoints(M + c * Z, M + r * Z, Z, t)}
+                  fill={PFILL[p.color]}
+                />
+              ))}
+            </g>
+          ))}
+      {!locked && hover && (
+        <g pointerEvents="none" aria-hidden="true">
+          <rect
+            x={M + hover[1] * Z + 1}
+            y={M + hover[0] * Z + 1}
+            width={Z - 2}
+            height={Z - 2}
+            fill="#596b801c"
+          />
+          {onEdge && previewType && (
+            <line
+              {...diagLine(M + hover[1] * Z, M + hover[0] * Z, Z, previewType)}
+              stroke={PCOLORS[selectedColor]}
+              strokeWidth="3"
+              opacity="0.5"
+            />
+          )}
+        </g>
+      )}
       {activeLaser?.points && (
         <polyline
           key={JSON.stringify(activeLaser.points)}
@@ -214,7 +266,15 @@ export function GameBoard({
               tabIndex={focus[0] === r && focus[1] === c ? 0 : -1}
               aria-label={`Cell ${String.fromCharCode(65 + r)}${c + 1}, ${guess[r]?.[c]?.color || "empty"}`}
               data-cell={`${r}-${c}`}
-              onFocus={() => setFocus([r, c])}
+              onPointerEnter={(e) => {
+                if (e.pointerType === "mouse") setHover([r, c]);
+              }}
+              onPointerLeave={() => setHover(null)}
+              onFocus={() => {
+                setFocus([r, c]);
+                setHover([r, c]);
+              }}
+              onBlur={() => setHover(null)}
               onClick={() => onCell(r, c)}
               onKeyDown={(e) => {
                 const dirs = {
@@ -261,7 +321,8 @@ export function GameBoard({
               highlight &&
               ((highlight.side === side && highlight.idx === i) ||
                 (highlight.exitSide === side && highlight.exitIdx === i));
-            const clickable = onLaser && !laserLocked;
+            const clickable =
+              onLaser && !laserLocked && (!newLaserLocked || used);
             return (
               <g
                 key={`${side}-${i}`}

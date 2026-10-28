@@ -25,14 +25,14 @@ The HTTP integration test needs the local Worker running with the sample key. Ov
 ## Game behavior
 
 - Daily puzzles are deterministic per UTC date and board size. Running games survive midnight; the player explicitly opens the new daily. Engine version 2 isolates the new rules and saved games.
-- Training supports relaxed or timed play and optional special pieces. Saved drawings, laser history and completed boards survive refresh. A new round replaces the previous training round for that board size.
-- Exact solution checks reject extra colored lines and missing boundaries. Empty-cell X notes do not affect correctness. Finished rounds remain available for comparison with the true board and laser replay.
+- Daily and training always track time. The transparent diamond and black square can be enabled independently in training and private rooms; daily puzzles never use extras. Saved drawings, laser history and completed boards survive refresh. A new round replaces the previous training round for that board size.
+- Exact solution checks reject extra colored lines and missing boundaries. Empty-cell X notes do not affect correctness. Submission immediately opens the result with an animated score and optional sound. See board reveals the solution with the drawing overlaid transparently, hides X notes and preserves the board size. New board starts the next training round.
 - Compact boards use four distinct shapes on 7×5; classic boards use five on 10×8. No duplicate shapes under rotation or reflection in the normal shape pool.
 - The transparent diamond reflects without adding a color. The black one-cell square absorbs the laser without adding a color or producing an exit. Only its position matters. These are documented adaptations of the supplied rules.
 - Colors are presented as a set, not mixed or ordered. There is no direct-cell scan. The Advanced section explains these choices and the timed scoring formula.
 - Training offers three hint levels per piece: approximate area, top-left cell and an outline overlay. Hint progress persists and shared results identify assisted rounds. Daily and duels have no hints.
-- Laser hits select an unfinished hit color automatically, based on complete shapes in the drawing, regardless of whether their positions are correct.
-- Profiles use a freely chosen name and a random local ID. There is no account recovery or cross-device identity. Daily Global has been removed; no public ranking is stored.
+- Laser hits keep the selected color if it was hit; otherwise they choose an unfinished hit color randomly, based on complete shapes in the drawing. Completed piece icons dim regardless of whether their positions are correct. The single-column log scrolls the selected shot into view without moving the page.
+- Profiles use a freely chosen name and a random local ID. There is no account recovery or cross-device identity. The menu marks the daily as pending, in progress or finished. A personal local scoreboard separates daily/training, board sizes and assisted rounds; no database or public ranking is required.
 
 ## Private duels
 
@@ -50,7 +50,7 @@ Room tokens and opponent layouts never appear in public activity. Requests are r
 
 ## Installing and offline play
 
-The menu's Install button opens the native installation prompt where available, or explains Safari's Share → Add to Home Screen flow on iPhone/iPad. The manifest launches the app standalone. After the first successful production load and service-worker installation, daily and training modes can run offline. Duels and admin require a connection. Development mode does not register the service worker. Mobile installation must also be verified on a physical phone before release.
+The menu shows Install app only after the browser supplies a native installation event. It hides after prompting, installation or standalone launch. iPhone/iPad instead show a clearly labeled guide to Safari’s Share → Add to Home Screen flow. The manifest launches the app standalone. After the first successful production load and service-worker installation, daily and training modes can run offline. Duels and admin require a connection. Development mode does not register the service worker. Native installation and offline launch also need checking on physical iOS and Android devices; desktop responsive mode cannot reproduce those operating-system flows.
 
 ## Deployment
 

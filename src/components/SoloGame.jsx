@@ -1,3 +1,6 @@
+import { ResultDialog } from "./ResultDialog.jsx";
+import { ExtraOptions } from "./ExtraOptions.jsx";
+import { unlockAudio } from "../game/audio.js";
 import { useState, useEffect } from "react";
 import { useGameSession } from "../hooks/useGameSession.js";
 import { nextPencilColor, trainingHint } from "../game/assistance.js";
@@ -13,7 +16,12 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
   const [color, setColor] = useState(pieces[0].color),
     [howTo, setHowTo] = useState(false),
     [confirm, setConfirm] = useState(null);
-  const [review, setReview] = useState("drawing"),
+  const [review, setReview] = useState("compare"),
+    [resultOpen, setResultOpen] = useState(false),
+    [freshResult, setFreshResult] = useState(false),
+    [selectionVersion, setSelectionVersion] = useState(0),
+    [optionsOpen, setOptionsOpen] = useState(false),
+    [nextExtras, setNextExtras] = useState(config.extras),
     [selected, setSelected] = useState(null),
     [now, setNow] = useState(Date.now()),
     [shareMessage, setShareMessage] = useState("");
@@ -24,7 +32,9 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
   }, []);
   useEffect(() => {
     setSelected(null);
-    setReview(game.status === "playing" ? "drawing" : "solution");
+    setReview("compare");
+    setResultOpen(false);
+    setShareMessage("");
     setColor(pieces[0].color);
   }, [game.id, pieces]);
   const seconds = game.startedAt
@@ -53,13 +63,26 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
     game.mode === "training"
       ? trainingHint(puzzle.placed, game.hintStep, cols, rows)
       : null;
+  const newBoard = () => {
+    setResultOpen(false);
+    state.newTraining(nextExtras);
+  };
+  const submit = () => {
+    unlockAudio();
+    state.submit();
+    setReview("compare");
+    setFreshResult(true);
+    setResultOpen(true);
+  };
   const fire = (side, idx) => {
     const existing = history.findIndex(
       (h) =>
         (h.side === side && h.idx === idx) ||
         (h.exitSide === side && h.exitIdx === idx),
     );
+    if (finished && existing < 0) return;
     setSelected(existing < 0 ? history.length : existing);
+    setSelectionVersion((v) => v + 1);
     if (!finished) {
       const result =
         existing < 0 ? fireLaser(puzzle.board, side, idx) : history[existing];
@@ -78,11 +101,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
         <div>
           <strong>ShapeIt</strong>
           <span className="badge">
-            {game.mode === "daily"
-              ? `Daily · ${game.date}`
-              : game.timed
-                ? "Timed training"
-                : "Relaxed training"}
+            {game.mode === "daily" ? `Daily · ${game.date}` : "Train mode"}
           </span>
         </div>
         <button
@@ -113,32 +132,6 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
           {history.length} lasers{game.timed ? ` · ${time}` : ""}
         </span>
       </div>
-      {finished && (
-        <div className="review-tabs compact-result" aria-live="polite">
-          <strong>
-            {game.status === "won" ? "Solved" : "Incorrect"}
-            {game.score !== null
-              ? ` · ${game.score.toLocaleString()} points`
-              : ""}
-            {game.hintStep ? " · Assisted" : ""}
-          </strong>
-          <button
-            aria-pressed={review === "solution"}
-            onClick={() => setReview("solution")}
-          >
-            Solution
-          </button>
-          <button
-            aria-pressed={review === "drawing"}
-            onClick={() => setReview("drawing")}
-          >
-            Your drawing
-          </button>
-          <button onClick={share}>Share</button>
-          <button onClick={state.newTraining}>New training</button>
-          {shareMessage && <span role="status">{shareMessage}</span>}
-        </div>
-      )}
       <div className="play-layout">
         <section className="board-panel">
           <GameBoard
@@ -147,7 +140,10 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             guess={game.guess}
             edges={game.edges}
             pieces={pieces}
-            revealed={finished && review === "solution" ? puzzle.placed : null}
+            revealed={finished ? puzzle.placed : null}
+            compare={finished && review === "compare"}
+            hideNotes={finished}
+            newLaserLocked={finished}
             hintPiece={!finished && hint?.level === 3 ? hint.piece : null}
             locked={finished}
             onCell={(r, c) => state.cell(r, c, color)}
@@ -155,9 +151,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             onLaser={fire}
             selectedColor={color}
             activeLaser={
-              finished && review === "solution" && selected !== null
-                ? history[selected]
-                : null
+              finished && selected !== null ? history[selected] : null
             }
             animate={effects}
             queries={history}
@@ -166,6 +160,45 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
         </section>
         <div className="game-sidebar">
           <aside className="tools-panel">
+            <PieceList
+              pieces={pieces}
+              guess={game.guess}
+              edges={game.edges}
+              onColor={!finished ? setColor : undefined}
+            />
+            {finished && (
+              <>
+                <strong className="inline-result">
+                  {game.status === "won" ? "Solved!" : "Incorrect"} ·{" "}
+                  {(game.score ?? 0).toLocaleString()} points
+                </strong>
+                <button className="primary next-board" onClick={newBoard}>
+                  New board →
+                </button>
+                <div className="button-row">
+                  <button
+                    onClick={() => {
+                      setFreshResult(false);
+                      setResultOpen(true);
+                    }}
+                  >
+                    Result
+                  </button>
+                  <button onClick={share}>Share</button>
+                </div>
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={review === "compare"}
+                    onChange={(e) =>
+                      setReview(e.target.checked ? "compare" : "solution")
+                    }
+                  />
+                  Overlay your drawing
+                </label>
+                {shareMessage && <p role="status">{shareMessage}</p>}
+              </>
+            )}
             {!finished && (
               <>
                 <ColorPicker
@@ -175,16 +208,10 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                 />
               </>
             )}
-            <PieceList pieces={pieces} />
+
             {!finished && (
               <>
-                <button
-                  className="primary"
-                  onClick={() => {
-                    state.submit();
-                    setReview("solution");
-                  }}
-                >
+                <button className="primary" onClick={submit}>
                   Submit solution
                 </button>
                 <div className="button-row">
@@ -194,7 +221,10 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                   {game.mode === "training" && (
                     <>
                       <button onClick={() => setConfirm("new")}>
-                        New round
+                        New board
+                      </button>
+                      <button onClick={() => setOptionsOpen(true)}>
+                        Extras
                       </button>
                       <button
                         disabled={game.hintStep >= pieces.length * 3}
@@ -218,13 +248,36 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             cols={cols}
             rows={rows}
             selected={selected}
+            selectionVersion={selectionVersion}
             onSelect={(i) => {
               setSelected(i);
-              if (finished) setReview("solution");
+              setSelectionVersion((v) => v + 1);
             }}
           />
         </div>
       </div>
+      {finished && resultOpen && (
+        <ResultDialog
+          title={game.status === "won" ? "Solved!" : "Not solved"}
+          won={game.status === "won"}
+          score={game.score ?? 0}
+          detail={`${time} · ${history.length} lasers${game.hintStep ? " · With hints" : ""}`}
+          onClose={() => setResultOpen(false)}
+          onNext={newBoard}
+          onShare={share}
+          message={shareMessage}
+          animate={freshResult}
+        />
+      )}
+      {optionsOpen && (
+        <Dialog title="Train mode extras" onClose={() => setOptionsOpen(false)}>
+          <ExtraOptions value={nextExtras} onChange={setNextExtras} />
+          <p className="muted small">Applies to your next board.</p>
+          <button className="primary" onClick={() => setOptionsOpen(false)}>
+            Done
+          </button>
+        </Dialog>
+      )}
       {howTo && (
         <HowToPlayModal
           pieces={pieces}
@@ -251,11 +304,11 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
               className="primary"
               onClick={() => {
                 if (confirm === "clear") state.clear();
-                else state.newTraining();
+                else newBoard();
                 setConfirm(null);
               }}
             >
-              {confirm === "clear" ? "Clear drawing" : "New round"}
+              {confirm === "clear" ? "Clear drawing" : "New board"}
             </button>
           </div>
         </Dialog>

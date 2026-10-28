@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-export function Dialog({ title, onClose, children }) {
+export function Dialog({ title, onClose, children, className = "" }) {
   const ref = useRef(null);
   const backdropDown = useRef(false);
   useEffect(() => {
@@ -10,7 +10,7 @@ export function Dialog({ title, onClose, children }) {
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={`dialog ${className}`}
       aria-label={title}
       onCancel={onClose}
       onPointerDown={(e) => {

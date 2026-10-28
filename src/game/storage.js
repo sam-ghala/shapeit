@@ -21,8 +21,11 @@ export function getProfile() {
   return saved &&
     /^[a-zA-Z0-9_-]{8,64}$/.test(saved.id) &&
     typeof saved.name === "string"
-    ? { id: saved.id, name: saved.name.trim().slice(0, 24) || "Explorer" }
-    : { id: crypto.randomUUID(), name: "Explorer" };
+    ? {
+        id: saved.id,
+        name: saved.name === "Explorer" ? "" : saved.name.trim().slice(0, 24),
+      }
+    : { id: crypto.randomUUID(), name: "" };
 }
 export function sessionKey(mode, size, date) {
   return `shapeit:v${ENGINE_VERSION}:${mode}:${size}${mode === "daily" ? `:${date}` : ""}`;
@@ -41,8 +44,8 @@ export function createSession({
     mode,
     size,
     date,
-    extras,
-    timed: mode === "daily" || timed,
+    extras: mode === "daily" ? false : extras,
+    timed: true,
     seed:
       mode === "daily"
         ? dailySeed(size, new Date(`${date}T12:00:00Z`))
@@ -121,13 +124,15 @@ export function loadSession(config) {
     sessionKey(config.mode, config.size, config.date),
     null,
   );
-  return validSession(saved, config) ? saved : createSession(config);
+  return validSession(saved, config)
+    ? { ...saved, timed: true }
+    : createSession(config);
 }
 export function queueEvent(event, profile) {
   const item = {
     ...event,
     profileId: profile.id,
-    name: profile.name,
+    name: profile.name || "Player",
     at: event.at || new Date().toISOString(),
   };
   const pending = readJSON("shapeit:events", []);
