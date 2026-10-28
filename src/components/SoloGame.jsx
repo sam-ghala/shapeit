@@ -85,7 +85,13 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                 : "Relaxed training"}
           </span>
         </div>
-        <button onClick={() => setHowTo(true)}>How to play</button>
+        <button
+          aria-label="How to play"
+          title="How to play"
+          onClick={() => setHowTo(true)}
+        >
+          ?
+        </button>
       </header>
       {storageError && (
         <p className="notice" role="status">

@@ -990,3 +990,21 @@ td {
     min-height: 130px;
   }
 }
+@media (max-width: 860px) {
+  .game-shell .topbar {
+    flex-wrap: nowrap;
+  }
+  .game-shell .topbar > div {
+    min-width: 0;
+  }
+  .game-sidebar .tools-panel button {
+    font-size: 12px;
+  }
+  .game-sidebar .tools-panel .button-row {
+    gap: 6px;
+  }
+  .game-sidebar .tools-panel .button-row button {
+    padding: 8px 10px;
+    min-height: 44px;
+  }
+}
