@@ -71,3 +71,31 @@ test("training hints progress from region to position to outline, then next piec
   assert.equal(trainingHint(placed, 3, 7, 5).level, 3);
   assert.equal(trainingHint(placed, 4, 7, 5).piece.id, "blue");
 });
+
+test("duel device classification does not treat a narrow desktop as a phone", async () => {
+  const { mobilePlayer } = await import("../src/game/device.js");
+  assert.equal(
+    mobilePlayer({
+      userAgent: "Mozilla/5.0 (Macintosh) Safari",
+      platform: "MacIntel",
+      maxTouchPoints: 0,
+    }),
+    false,
+  );
+  assert.equal(
+    mobilePlayer({
+      userAgent: "Mozilla/5.0 (iPhone) Safari",
+      platform: "iPhone",
+      maxTouchPoints: 5,
+    }),
+    true,
+  );
+  assert.equal(
+    mobilePlayer({
+      userAgent: "Mozilla/5.0 (Macintosh) Safari",
+      platform: "MacIntel",
+      maxTouchPoints: 5,
+    }),
+    true,
+  );
+});

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { mobilePlayer } from "./game/device.js";
 import { dailyDate, buildPieces } from "./game/engine.js";
 import {
   getProfile,
@@ -96,7 +97,7 @@ export default function ShapeIt() {
       <DuelGame
         profile={profile}
         onProfileChange={setProfile}
-        mobile={smallDevice()}
+        mobile={mobilePlayer()}
         effects={effects}
         initialCode={/^\d{4}$/.test(initialCode) ? initialCode : ""}
         onHome={home}
