@@ -249,6 +249,20 @@ legend {
   gap: 10px;
   flex-shrink: 0;
 }
+.secondary-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  order: 1;
+}
+.game-sidebar > .query-log {
+  order: 2;
+}
+.secondary-tools .button-row button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
 .tools-panel .button-row button {
   font-size: 12px;
   padding: 6px 10px;
@@ -1025,6 +1039,15 @@ td {
     min-height: 0;
     gap: 10px;
   }
+  .secondary-tools {
+    order: 3;
+  }
+  .secondary-tools .button-row {
+    gap: 6px;
+  }
+  .secondary-tools .button-row button {
+    min-height: 44px;
+  }
   .tools-panel {
     gap: 10px;
   }
@@ -1285,92 +1308,143 @@ td {
     max-height: none;
   }
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: only dark;
-    --canvas: #182431;
-    --paper: #253748;
-    --surface: #253748;
-    --ink: #e6eef5;
-    --muted: #b5c7d7;
-    --soft: #30475b;
-  }
-  body:has(.arcade-menu) {
-    background-color: #182431;
-    background-image: radial-gradient(#364754 1px, transparent 1px);
-  }
-  .arcade-mode,
-  .board-choice,
-  .menu-shortcuts,
-  .name-button {
-    color-scheme: only light;
-    color: #263646;
-  }
+
+/* Keep the game light, including on devices whose system theme is dark. */
+html,
+body,
+.dialog {
+  color-scheme: only light;
+}
+.menu-top {
+  display: block;
+  position: relative;
+  padding-top: 30px;
+  flex-shrink: 0;
+}
+.game-title h1 {
+  font-size: clamp(64px, 9vw, 88px);
+  line-height: 1.05;
+  letter-spacing: -4px;
+}
+.name-button {
+  position: absolute;
+  right: 0;
+  top: -6px;
+  max-width: 70%;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-height: 36px;
+  padding: 4px 0;
+  color: var(--muted);
+}
+.board-choice {
+  align-self: center;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  gap: 0;
+  padding: 3px;
+  background: var(--paper);
+  flex-shrink: 0;
+}
+.board-choice button {
+  white-space: nowrap;
+  border: 0;
+  border-radius: 7px;
+  box-shadow: none;
+  background: transparent;
+  padding: 6px 18px;
+}
+.board-choice button[aria-pressed="true"] {
+  outline: none;
+  box-shadow: none;
+}
+.menu-shortcuts {
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 24px;
+}
+.menu-shortcuts button {
+  flex: initial;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 6px;
+  min-height: 44px;
+  font-size: 16px;
+}
+.howto-dialog .dialog-heading h2 {
+  font-size: 30px;
+}
+.howto-dialog .guide-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 12px;
+  padding: 10px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--ink);
+  background: #ffd253;
+  font-size: 19px;
+}
+.howto-dialog .guide-section:nth-of-type(3n + 2) {
+  background: #65c9ea;
+}
+.howto-dialog .guide-section:nth-of-type(3n) {
+  background: #fa9180;
+}
+.guide-practice {
+  background: #eaf6fc;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  padding: 14px;
+}
+.guide-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.guide-tabs button {
+  flex: 1;
+}
+.guide-tabs button[aria-pressed="true"] {
+  background: #65c9ea;
+  box-shadow: 0 3px 0 var(--ink);
+}
+.advanced-guide {
+  background: #fff2cf;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  padding: 14px;
+}
+.advanced-guide summary {
+  font-size: 19px;
+}
+.howto-dialog svg {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-height: 620px) {
   .game-title h1 {
-    color: #e6eef5;
-    text-shadow: 2px 3px 0 #0b1623;
+    font-size: 60px;
   }
-  .menu-credit,
-  .menu-install button {
-    color: #b5c7d7;
+  .menu-top {
+    padding-top: 26px;
   }
-  .primary {
-    color-scheme: only light;
-  }
-  .card h2 {
-    color: #ffab92;
-  }
-  .large-code {
-    color: #65c9ea;
-  }
-  .color-picker,
-  .piece-list,
-  .placement-pieces {
-    color-scheme: only light;
-  }
-  .color-button.selected {
-    outline-color: #f5f8fc;
-  }
-  .query-log button {
-    color: #e6eef5;
-  }
-  .query-log button.selected {
-    background: #385f82;
-  }
-  .review-tabs button[aria-pressed="true"] {
-    color: #263646;
-  }
-  input:not([type="checkbox"]),
-  select {
-    background: #253748;
-    color: #e6eef5;
-  }
-  .hint,
-  .notice {
-    background: #30475b;
-  }
-  .dialog:has(.advanced-guide) {
-    color-scheme: only light;
-    background: #fffefa;
-    color: #263646;
-  }
-  .result-dialog.success .dialog-heading h2 {
-    color: #90dfa9;
-  }
-  .result-dialog.failure .dialog-heading h2 {
-    color: #ffab92;
-  }
-  .result-score strong {
-    color: #65c9ea;
+  .arcade-modes {
+    flex-basis: 230px;
   }
 }
-
-@media (prefers-color-scheme: dark) {
-  .query-player,
-  .query-colors {
-    color: var(--muted);
+@media (max-width: 380px) {
+  .game-title h1 {
+    font-size: 62px;
   }
-  .query-colors i {
-    box-shadow: 0 0 0 1px #b5c7d766;
+  .menu-shortcuts {
+    gap: 18px;
+  }
+  .howto-dialog .guide-section {
+    font-size: 17px;
+    padding: 9px;
   }
 }

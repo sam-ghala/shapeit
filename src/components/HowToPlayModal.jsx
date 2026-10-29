@@ -90,39 +90,19 @@ const EX_BOARD = buildExBoard();
 function TrainingAndExample() {
   const [mode, setMode] = useState("training");
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+    <div className="guide-practice">
+      <div className="guide-tabs" role="group" aria-label="Practice example">
         <button
+          aria-pressed={mode === "training"}
           onClick={() => setMode("training")}
-          style={{
-            flex: 1,
-            padding: "10px 8px",
-            fontSize: 13,
-            fontWeight: 600,
-            borderRadius: 8,
-            cursor: "pointer",
-            border: "none",
-            background: mode === "training" ? "#1E88E5" : "#f0f0f0",
-            color: mode === "training" ? "#fff" : "#666",
-          }}
         >
-          Training
+          Try lasers
         </button>
         <button
+          aria-pressed={mode === "example"}
           onClick={() => setMode("example")}
-          style={{
-            flex: 1,
-            padding: "10px 8px",
-            fontSize: 13,
-            fontWeight: 600,
-            borderRadius: 8,
-            cursor: "pointer",
-            border: "none",
-            background: mode === "example" ? "#1E88E5" : "#f0f0f0",
-            color: mode === "example" ? "#fff" : "#666",
-          }}
         >
-          Small example
+          Try drawing
         </button>
       </div>
       {mode === "training" ? <TrainingMode /> : <ExampleMode />}
@@ -173,7 +153,7 @@ function TrainingMode() {
     <div>
       <p style={{ fontSize: 13, color: "#666", margin: "0 0 10px" }}>
         Click the labels to fire lasers. The laser bounces off piece edges.
-        Watch the query log to see which colors were hit.
+        Watch the laser log to see which colors were hit.
       </p>
       <div
         style={{ display: "flex", justifyContent: "center", margin: "8px 0" }}
@@ -416,12 +396,12 @@ function TrainingMode() {
       <div
         style={{
           fontSize: 12,
-          color: "#999",
+          color: "var(--muted)",
           marginBottom: 4,
           fontWeight: 600,
         }}
       >
-        QUERY LOG
+        LASER LOG
       </div>
       <table
         style={{
@@ -439,7 +419,7 @@ function TrainingMode() {
                 style={{
                   textAlign: "left",
                   padding: "4px 6px",
-                  color: "#aaa",
+                  color: "var(--muted)",
                   fontSize: 11,
                 }}
               >
@@ -453,7 +433,11 @@ function TrainingMode() {
             <tr>
               <td
                 colSpan={4}
-                style={{ padding: "10px 6px", color: "#ccc", fontSize: 12 }}
+                style={{
+                  padding: "10px 6px",
+                  color: "var(--muted)",
+                  fontSize: 12,
+                }}
               >
                 Click a label to fire
               </td>
@@ -461,7 +445,9 @@ function TrainingMode() {
           ) : (
             log.map((h, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "4px 6px", color: "#bbb" }}>{i + 1}</td>
+                <td style={{ padding: "4px 6px", color: "var(--muted)" }}>
+                  {i + 1}
+                </td>
                 <td style={{ padding: "4px 6px", fontWeight: 600 }}>
                   {h.entry}
                 </td>
@@ -470,7 +456,7 @@ function TrainingMode() {
                 </td>
                 <td style={{ padding: "4px 6px" }}>
                   {h.colors.length === 0 ? (
-                    <span style={{ color: "#ccc" }}>none</span>
+                    <span style={{ color: "var(--muted)" }}>none</span>
                   ) : (
                     <div style={{ display: "flex", gap: 3 }}>
                       {h.colors.map((col, j) => (
@@ -494,7 +480,7 @@ function TrainingMode() {
           )}
         </tbody>
       </table>
-      <p style={{ fontSize: 12, color: "#aaa", margin: 0 }}>
+      <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
         Click any label as many times as you want. The color list does not
         reveal the order in which pieces were hit.
       </p>
@@ -862,7 +848,7 @@ function ExampleMode() {
             style={{
               fontSize: 11,
               fontWeight: 600,
-              color: "#999",
+              color: "var(--muted)",
               marginBottom: 6,
             }}
           >
@@ -914,12 +900,12 @@ function ExampleMode() {
       <div
         style={{
           fontSize: 12,
-          color: "#999",
+          color: "var(--muted)",
           marginBottom: 4,
           fontWeight: 600,
         }}
       >
-        QUERY LOG
+        LASER LOG
       </div>
       <table
         style={{
@@ -937,7 +923,7 @@ function ExampleMode() {
                 style={{
                   textAlign: "left",
                   padding: "4px 6px",
-                  color: "#aaa",
+                  color: "var(--muted)",
                   fontSize: 11,
                 }}
               >
@@ -951,7 +937,11 @@ function ExampleMode() {
             <tr>
               <td
                 colSpan={4}
-                style={{ padding: "10px 6px", color: "#ccc", fontSize: 12 }}
+                style={{
+                  padding: "10px 6px",
+                  color: "var(--muted)",
+                  fontSize: 12,
+                }}
               >
                 Click a label to fire
               </td>
@@ -959,7 +949,9 @@ function ExampleMode() {
           ) : (
             log.map((h, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "4px 6px", color: "#bbb" }}>{i + 1}</td>
+                <td style={{ padding: "4px 6px", color: "var(--muted)" }}>
+                  {i + 1}
+                </td>
                 <td style={{ padding: "4px 6px", fontWeight: 600 }}>
                   {h.entry}
                 </td>
@@ -968,7 +960,7 @@ function ExampleMode() {
                 </td>
                 <td style={{ padding: "4px 6px" }}>
                   {h.colors.length === 0 ? (
-                    <span style={{ color: "#ccc" }}>none</span>
+                    <span style={{ color: "var(--muted)" }}>none</span>
                   ) : (
                     <div style={{ display: "flex", gap: 3 }}>
                       {h.colors.map((col, j) => (
@@ -1015,7 +1007,7 @@ function ExampleMode() {
   );
 }
 
-export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
+export function HowToPlayModal({ onClose, pieces }) {
   const S = 28;
   const c1 = "#E53935",
     c2 = "#1E88E5",
@@ -1035,23 +1027,16 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
       }}
     />
   );
-  const sec = {
-    fontSize: 16,
-    fontWeight: 700,
-    margin: "22px 0 10px",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  };
   const p = {
-    fontSize: 14,
-    lineHeight: 1.7,
-    color: "#444",
+    fontSize: 15,
+    lineHeight: 1.6,
+    color: "var(--ink)",
     margin: "0 0 12px",
   };
   const fig = {
-    background: "#fafafa",
-    borderRadius: 10,
+    background: "#eaf6fc",
+    border: "2px solid #263646",
+    borderRadius: 14,
     padding: 12,
     margin: "10px 0 16px",
     display: "flex",
@@ -1098,7 +1083,7 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
           {children(m)}
         </svg>
         {label && (
-          <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
             {label}
           </div>
         )}
@@ -1107,46 +1092,16 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
   }
 
   return (
-    <Dialog title="How to play" onClose={onClose}>
-      <div style={{ textAlign: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>
-          <span style={{ color: c1 }}>S</span>
-          <span style={{ color: c2 }}>h</span>
-          <span style={{ color: c3 }}>a</span>
-          <span style={{ color: c4 }}>p</span>
-          <span style={{ color: c1 }}>e</span>
-          <span style={{ color: c2 }}>I</span>
-          <span style={{ color: c3 }}>t</span>
-        </div>
-        <div style={{ fontSize: 14, color: "#888" }}>
-          Find {pieces.length} hidden pieces on the grid
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            justifyContent: "center",
-            marginTop: 8,
-          }}
-        >
-          {pieces.map((pc, i) => (
-            <React.Fragment key={pc.id || i}>
-              {dot(PCOLORS[pc.color], 14)}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-
-      <div style={sec}>
+    <Dialog title="How to play" onClose={onClose} className="howto-dialog">
+      <h3 className="guide-section">
         {dot(c1, 12)}
         {dot(c2, 12)}
-        {dot(c3, 12)} The {pieces.length} hidden pieces
-      </div>
+        {dot(c3, 12)} Hidden pieces
+      </h3>
       <p style={p}>
-        Each puzzle hides these {pieces.length} colored pieces somewhere on the{" "}
-        {cols}×{rows} grid. Your job is to find exactly where each one is.
-        Pieces may rotate or mirror. They may touch at a point, but never share
-        an edge. Every piece must be reachable by a laser.
+        Find these pieces on the hidden board. Pieces may rotate or mirror. They
+        may touch at a point, but never share an edge. Every piece must be
+        reachable by a laser.
       </p>
       <div style={{ ...fig, flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
         {pieces.map((pc) => (
@@ -1156,7 +1111,7 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
         ))}
       </div>
 
-      <div style={sec}>{dot(c2, 12)} Fire lasers to gather clues</div>
+      <h3 className="guide-section">{dot(c2, 12)} Fire lasers</h3>
       <p style={p}>
         Click any numbered or lettered label around the grid to shoot a laser
         into that row or column. The laser travels in a straight line until it
@@ -1260,7 +1215,7 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
             );
           }}
         </MiniGrid>
-        <div style={{ fontSize: 12, color: "#888" }}>
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>
           The diagonal edge reflects the laser 90 degrees
         </div>
       </div>
@@ -1352,13 +1307,13 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
             );
           }}
         </MiniGrid>
-        <div style={{ fontSize: 12, color: "#888" }}>
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>
           Laser enters "3" and exits "3", bounced off the flat top of the
           parallelogram
         </div>
       </div>
 
-      <div style={sec}>{dot(c3, 12)} Reading the query log</div>
+      <h3 className="guide-section">{dot(c3, 12)} Laser log</h3>
       <p style={p}>
         After each laser, the log shows the entry point, exit point, and which
         piece colors the laser touched (listed without revealing their order).
@@ -1379,7 +1334,7 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
             maxWidth: 340,
           }}
         >
-          <span style={{ color: "#999", fontSize: 12 }}>1</span>
+          <span style={{ color: "var(--muted)", fontSize: 12 }}>1</span>
           <span style={{ fontWeight: 700 }}>P</span>
           <span style={{ fontWeight: 700 }}>3</span>
           <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
@@ -1389,7 +1344,7 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
             {dot(c2, 14)}
           </div>
         </div>
-        <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
           Laser entered at P, exited at 3. Hit {dot(c3)} yellow, {dot(c1)} red,{" "}
           {dot(c4)} white, and {dot(c2)} blue
         </div>
@@ -1402,7 +1357,7 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
         reflect the laser without adding a color.
       </p>
 
-      <div style={sec}>{dot(c1, 12)} Drawing your guess</div>
+      <h3 className="guide-section">{dot(c1, 12)} Draw your guess</h3>
       <p style={p}>Select a color, then build piece outlines on the grid:</p>
 
       <div style={{ ...fig, flexDirection: "row", gap: 24, flexWrap: "wrap" }}>
@@ -1565,115 +1520,23 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
         </div>
       </div>
 
-      <div style={sec}>{dot(c4, 12)} Submit when ready</div>
+      <h3 className="guide-section">{dot(c4, 12)} Submit when ready</h3>
       <p style={p}>
-        Once you've placed all {pieces.length} pieces, hit{" "}
-        <span
-          style={{
-            background: "#1E88E5",
-            color: "white",
-            padding: "2px 10px",
-            borderRadius: 4,
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          Submit solution
-        </span>
-        . Every piece must be in the <em>exact</em> correct position to win.
-      </p>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 16,
-          justifyContent: "center",
-          margin: "14px 0 8px",
-          flexWrap: "wrap",
-        }}
-      >
-        <div
-          style={{
-            background: "white",
-            borderRadius: 12,
-            padding: "18px 24px",
-            textAlign: "center",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-            minWidth: 180,
-          }}
-        >
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-            <span style={{ color: c1 }}>S</span>
-            <span style={{ color: c2 }}>o</span>
-            <span style={{ color: c3 }}>l</span>
-            <span style={{ color: c4 }}>v</span>
-            <span style={{ color: c1 }}>e</span>
-            <span style={{ color: c2 }}>d</span>
-            <span style={{ color: c3 }}>!</span>
-          </div>
-          <div style={{ fontSize: 12, color: "#333", fontWeight: 600 }}>
-            Solved in 2:34
-          </div>
-          <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>
-            with 12 queries
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              background: "#1E88E5",
-              color: "white",
-              padding: "4px 14px",
-              borderRadius: 6,
-              fontSize: 11,
-              fontWeight: 600,
-              display: "inline-block",
-            }}
-          >
-            Share result
-          </div>
-        </div>
-        <div
-          style={{
-            background: "white",
-            borderRadius: 12,
-            padding: "18px 24px",
-            textAlign: "center",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-            minWidth: 180,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: c1,
-              marginBottom: 6,
-            }}
-          >
-            Incorrect
-          </div>
-          <div style={{ fontSize: 11, color: "#666" }}>12 queries used</div>
-          <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
-            The correct solution
-            <br />
-            is shown on the board
-          </div>
-        </div>
-      </div>
-      <p style={{ ...p, textAlign: "center", fontSize: 13, color: "#999" }}>
-        If wrong, the correct answer is shown. One shot, make it count.
+        Submit your drawing to see your result and score. Then compare it with
+        the solution, replay any laser, share your result or start a new board.
       </p>
 
       {/* ── TRY IT ── */}
-      <div style={sec}>{dot(c1, 12)} Try it</div>
+      <h3 className="guide-section">{dot(c1, 12)} Try it</h3>
       <TrainingAndExample />
 
       {/* ── TIPS ── */}
-      <div style={sec}>{dot(c2, 12)} Tips</div>
+      <h3 className="guide-section">{dot(c2, 12)} Tips</h3>
       <div
         style={{
-          background: "#f8f8f8",
-          borderRadius: 10,
+          background: "#fff2cf",
+          border: "2px solid #263646",
+          borderRadius: 14,
           padding: "14px 16px",
           margin: "0 0 16px",
           fontSize: 13,
@@ -1700,25 +1563,13 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
         progress.
       </div>
 
-      <div
-        style={{
-          textAlign: "center",
-          fontSize: 13,
-          color: "#aaa",
-          marginTop: 12,
-        }}
-      >
-        Good luck! {dot(c1)}
-        {dot(c2)}
-        {dot(c3)}
-      </div>
       <details className="advanced-guide">
-        <summary>Advanced · scoring, special pieces & duels</summary>
+        <summary>Advanced</summary>
         <h3>Daily & train mode</h3>
         <p>
           The clock starts with your first laser, pencil mark or training hint.
           It keeps running when you leave or reload. You get one submission per
-          round. Closing the result never restarts a finished round.
+          round.
         </p>
         <p>
           Your score is the time factor × the laser factor, rounded to the
@@ -1730,9 +1581,8 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
           Example: 2 minutes and 5 lasers = 5,000 points. 2 minutes and 10
           lasers = 4,000. Reopening an existing laser clue costs nothing.
           Training hints reveal an area, a starting cell, then an outline;
-          results using hints have their own personal best list. Daily puzzles
-          reset at 00:00 UTC and are shared by players using the same board
-          size.
+          rounds with hints are not saved to your scores. Daily puzzles reset at
+          00:00 UTC and are shared by players using the same board size.
         </p>
         <h3>Transparent diamond</h3>
         <p>
@@ -1748,12 +1598,12 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
         </p>
         <h3>1 vs 1</h3>
         <p>
-          Join with a link or a four-digit code. Two computers use 10×8; if
-          either player uses a phone, both use 7×5. Both receive the same normal
-          pieces for that board size. Start with an empty board, select a shape
-          and place it. There is no setup timer: play starts when both players
-          confirm complete, legal boards. Only the two extra pieces are
-          optional.
+          Join with a link or a four-digit code. Two computers use a big board;
+          if either player uses a phone, both use a small board. Both receive
+          the same normal pieces for that board size. Start with an empty board,
+          select a shape and place it. There is no setup timer: play starts when
+          both players confirm complete, legal boards. Only the two extra pieces
+          are optional.
         </p>
         <p>
           Take turns firing one laser. Both players see each query and its
@@ -1762,10 +1612,6 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
           Both correct: draw. One correct: that player wins. Both wrong: both
           lose. Afterwards you can inspect both drawings, solutions and laser
           paths.
-        </p>
-        <p>
-          ShapeIt shows individual colors rather than Orapa's mixed color, and
-          does not currently use direct cell scans.
         </p>
       </details>
     </Dialog>

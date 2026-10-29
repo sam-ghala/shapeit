@@ -16,10 +16,19 @@ export function validScore(s) {
 }
 export function readScores() {
   const saved = readJSON(KEY, []);
-  return Array.isArray(saved) ? saved.filter(validScore) : [];
+  if (!Array.isArray(saved)) return [];
+  const scores = saved.filter((s) => validScore(s) && !s.assisted);
+  // Remove legacy assisted results, without touching unassisted personal bests.
+  if (saved.some((s) => s?.assisted)) writeJSON(KEY, scores);
+  return scores;
 }
 export function saveResult(game) {
-  if (game.status === "playing" || !Number.isFinite(game.finishedAt)) return;
+  if (
+    game.status === "playing" ||
+    game.hintStep ||
+    !Number.isFinite(game.finishedAt)
+  )
+    return;
   const result = {
     id: game.id,
     mode: game.mode,
@@ -30,7 +39,7 @@ export function saveResult(game) {
     seconds: Math.max(0, Math.floor((game.finishedAt - game.startedAt) / 1000)),
     queries: game.history.length,
     finishedAt: game.finishedAt,
-    assisted: !!game.hintStep,
+    assisted: false,
     extras: normalizeExtras(game.extras),
   };
   if (!validScore(result)) return;
@@ -40,7 +49,7 @@ export function saveResult(game) {
   const all = [result, ...previous];
   const categories = new Map();
   for (const score of all) {
-    const key = `${score.mode}:${score.size}:${score.assisted}`;
+    const key = `${score.mode}:${score.size}`;
     if (!categories.has(key)) categories.set(key, []);
     categories.get(key).push(score);
   }
@@ -66,14 +75,11 @@ export function importSavedResults() {
     }
   } catch {}
 }
-export function personalBests(scores, mode, size, assisted = false) {
+export function personalBests(scores, mode, size) {
   return scores
     .filter(
       (s) =>
-        s.status === "won" &&
-        s.mode === mode &&
-        s.size === size &&
-        s.assisted === assisted,
+        s.status === "won" && s.mode === mode && s.size === size && !s.assisted,
     )
     .sort(
       (a, b) =>

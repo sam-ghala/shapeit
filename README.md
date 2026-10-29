@@ -30,9 +30,9 @@ The HTTP integration test needs the local Worker running with the sample key. Ov
 - Compact boards use four distinct shapes on 7×5; classic boards use five on 10×8. No duplicate shapes under rotation or reflection in the normal shape pool.
 - The transparent diamond reflects without adding a color. The black one-cell square absorbs the laser without adding a color or producing an exit. Only its position matters. These are documented adaptations of the supplied rules.
 - Colors are presented as a set, not mixed or ordered. There is no direct-cell scan. The Advanced section explains these choices and the timed scoring formula.
-- Training offers three hint levels per piece: approximate area, top-left cell and an outline overlay. Hint progress persists and shared results identify assisted rounds. Daily and duels have no hints.
+- Training offers three hint levels per piece: approximate area, top-left cell and an outline overlay. Hint progress persists and shared results identify assisted rounds. Rounds with hints are excluded from personal scores, including previously saved assisted results. Daily and duels have no hints.
 - Laser hits keep the selected color if it was hit; otherwise they choose an unfinished hit color randomly, based on complete shapes in the drawing. Completed piece icons dim regardless of whether their positions are correct. The single-column log scrolls the selected shot into view without moving the page.
-- Profiles use a freely chosen name and a random local ID. There is no account recovery or cross-device identity. The menu marks the daily as pending, in progress or finished. A personal local scoreboard separates daily/training, board sizes and assisted rounds; no database or public ranking is required.
+- Profiles use a freely chosen name and a random local ID. There is no account recovery or cross-device identity. The menu marks the daily as pending, in progress or finished. A personal local scoreboard separates daily/training and board sizes. It excludes all rounds with hints, has no time-based expiry, and keeps the top 20 per category plus the 200 most recent results; no database or public ranking is required.
 
 ## Private duels
 

@@ -11,14 +11,8 @@ export function Scoreboard({ onClose, initialSize = "classic" }) {
     return readScores();
   });
   const [mode, setMode] = useState("daily"),
-    [size, setSize] = useState(initialSize),
-    [assisted, setAssisted] = useState(false);
-  const best = personalBests(
-    scores,
-    mode,
-    size,
-    mode === "training" && assisted,
-  );
+    [size, setSize] = useState(initialSize);
+  const best = personalBests(scores, mode, size);
   return (
     <Dialog title="Your best scores" onClose={onClose}>
       <div className="score-filters">
@@ -32,20 +26,10 @@ export function Scoreboard({ onClose, initialSize = "classic" }) {
         <label>
           Board
           <select value={size} onChange={(e) => setSize(e.target.value)}>
-            <option value="classic">10 × 8</option>
-            <option value="compact">7 × 5</option>
+            <option value="classic">Big board</option>
+            <option value="compact">Small board</option>
           </select>
         </label>
-        {mode === "training" && (
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={assisted}
-              onChange={(e) => setAssisted(e.target.checked)}
-            />
-            With hints
-          </label>
-        )}
       </div>
       {best.length ? (
         <ol className="personal-scores">
@@ -67,7 +51,6 @@ export function Scoreboard({ onClose, initialSize = "classic" }) {
       ) : (
         <p className="empty-scores">Solve a board to set your first score.</p>
       )}
-      <p className="muted small">Personal scores saved on this device.</p>
     </Dialog>
   );
 }

@@ -48,7 +48,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
     : 0;
   const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   const share = async () => {
-    const text = `ShapeIt ${game.mode === "daily" ? game.date : "Training"} · ${cols}×${rows}\n${game.status === "won" ? "Solved" : "Not solved"} in ${time} with ${history.length} lasers${game.score !== null ? ` · ${game.score.toLocaleString()} points` : ""}${game.hintStep ? " · Assisted" : ""}\nhttps://playshapeit.com`;
+    const text = `ShapeIt ${game.mode === "daily" ? game.date : "Training"} · ${game.size === "compact" ? "Small board" : "Big board"}\n${game.status === "won" ? "Solved" : "Not solved"} in ${time} with ${history.length} lasers${game.score !== null ? ` · ${game.score.toLocaleString()} points` : ""}${game.hintStep ? " · Assisted" : ""}\nhttps://playshapeit.com`;
     try {
       if (navigator.share) await navigator.share({ text });
       else {
@@ -178,20 +178,6 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                   {game.status === "won" ? "Solved!" : "Incorrect"} ·{" "}
                   {(game.score ?? 0).toLocaleString()} points
                 </strong>
-                <button className="primary next-board" onClick={newBoard}>
-                  New board →
-                </button>
-                <div className="button-row">
-                  <button
-                    onClick={() => {
-                      setFreshResult(false);
-                      setResultOpen(true);
-                    }}
-                  >
-                    Result
-                  </button>
-                  <button onClick={share}>Share</button>
-                </div>
                 <label className="check-label">
                   <input
                     type="checkbox"
@@ -212,14 +198,46 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                   value={color}
                   onChange={setColor}
                 />
-              </>
-            )}
-
-            {!finished && (
-              <>
                 <button className="primary" onClick={submit}>
                   Submit solution
                 </button>
+              </>
+            )}
+          </aside>
+          <QueryLog
+            history={history}
+            cols={cols}
+            rows={rows}
+            selected={selected}
+            selectionVersion={selectionVersion}
+            onSelect={(i) => {
+              if (finished) fire(history[i].side, history[i].idx);
+              else {
+                setSelected(i);
+                setSelectionVersion((v) => v + 1);
+              }
+            }}
+          />
+          <div className="secondary-tools">
+            {finished ? (
+              <>
+                <button className="primary next-board" onClick={newBoard}>
+                  New board →
+                </button>
+                <div className="button-row">
+                  <button
+                    onClick={() => {
+                      setFreshResult(false);
+                      setResultOpen(true);
+                    }}
+                  >
+                    Result
+                  </button>
+                  <button onClick={share}>Share</button>
+                </div>
+              </>
+            ) : (
+              <>
                 <div className="button-row">
                   <button onClick={() => setConfirm("clear")}>
                     Clear drawing
@@ -248,21 +266,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                 {hint.text}
               </p>
             )}
-          </aside>
-          <QueryLog
-            history={history}
-            cols={cols}
-            rows={rows}
-            selected={selected}
-            selectionVersion={selectionVersion}
-            onSelect={(i) => {
-              if (finished) fire(history[i].side, history[i].idx);
-              else {
-                setSelected(i);
-                setSelectionVersion((v) => v + 1);
-              }
-            }}
-          />
+          </div>
         </div>
       </div>
       {finished && resultOpen && (
@@ -270,7 +274,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
           title={game.status === "won" ? "Solved!" : "Not solved"}
           won={game.status === "won"}
           score={game.score ?? 0}
-          detail={`${time} · ${history.length} lasers${game.hintStep ? " · With hints" : ""}`}
+          detail={`${time} · ${history.length} lasers`}
           onClose={() => setResultOpen(false)}
           onNext={newBoard}
           onShare={share}

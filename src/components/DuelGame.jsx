@@ -172,10 +172,6 @@ export function DuelGame({
           <section className="card">
             <div className="mode-symbol blue">↗</div>
             <h2>Challenge a friend</h2>
-            <p>
-              Create a private room, share the link, and build a board for each
-              other.
-            </p>
             <button
               className="primary"
               onClick={() => enter(false)}
@@ -259,15 +255,6 @@ export function DuelGame({
                 <li className="muted">Waiting for your friend…</li>
               )}
             </ul>
-            <p>
-              {room.size === "compact"
-                ? "Small board · Same pieces for both players."
-                : "Big board · Small board if a phone joins."}
-            </p>
-            <p className="muted small">
-              Rooms expire after two hours. Keep this browser to reconnect with
-              your player identity.
-            </p>
           </section>
           <section className="card">
             <h2>Room settings</h2>

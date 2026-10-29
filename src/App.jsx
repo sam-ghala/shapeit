@@ -141,14 +141,14 @@ export default function ShapeIt() {
             onClick={() => setSize("compact")}
           >
             <span aria-hidden="true">{size === "compact" ? "✓" : "◇"}</span>{" "}
-            Small board <small>7 × 5</small>
+            Small board
           </button>
           <button
             aria-pressed={size === "classic"}
             onClick={() => setSize("classic")}
           >
             <span aria-hidden="true">{size === "classic" ? "✓" : "◇"}</span> Big
-            board <small>10 × 8</small>
+            board
           </button>
         </div>
       )}
@@ -194,9 +194,7 @@ export default function ShapeIt() {
       <div className="menu-install">
         <InstallButton />
       </div>
-      <footer className="menu-credit">
-        Robin & Sam · Daily resets at midnight UTC
-      </footer>
+      <footer className="menu-credit">Robin & Sam</footer>
       {profileOpen && (
         <Dialog title="Your name" onClose={() => setProfileOpen(false)}>
           <form
