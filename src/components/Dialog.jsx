@@ -12,7 +12,10 @@ export function Dialog({ title, onClose, children, className = "" }) {
       ref={ref}
       className={`dialog ${className}`}
       aria-label={title}
-      onCancel={onClose}
+      onCancel={(e) => {
+        e?.stopPropagation();
+        onClose();
+      }}
       onPointerDown={(e) => {
         const box = e.currentTarget.getBoundingClientRect();
         backdropDown.current =

@@ -2,6 +2,7 @@ import { MenuButton } from "./MenuButton.jsx";
 import { SoundToggle } from "./SoundToggle.jsx";
 import { previewPlacement } from "../game/placement.js";
 import { ExtraOptions } from "./ExtraOptions.jsx";
+import { RaceResultDialog } from "./RaceResultDialog.jsx";
 import { ResultDialog } from "./ResultDialog.jsx";
 import { unlockAudio, playSound } from "../game/audio.js";
 import { nextPencilColor } from "../game/assistance.js";
@@ -289,10 +290,11 @@ export function DuelGame({
                     "Take turns",
                     "Alternate lasers. One final attempt each.",
                   ],
+                  ["race", "Score race", "Create boards. Race for points."],
                   [
-                    "race",
-                    "Score race",
-                    "Play together. Time + lasers decide the score.",
+                    "random",
+                    "Random race",
+                    "Same random board. Start straight away.",
                   ],
                 ].map(([mode, title, help]) => (
                   <button
@@ -326,7 +328,9 @@ export function DuelGame({
                 disabled={room.players.length !== 2 || busy}
                 onClick={() => action({ type: "start" })}
               >
-                Start placing
+                {room.settings.mode === "random"
+                  ? "Start race"
+                  : "Start placing"}
               </button>
             ) : (
               <p className="notice">
@@ -402,7 +406,10 @@ export function DuelBoard({
         Math.max(0, Math.ceil((room.deadline - clock - offset.current) / 1000)),
       )
     : null;
-  const race = room.settings.mode === "race";
+  const race = ["race", "random"].includes(room.settings.mode);
+  const randomRace = room.settings.mode === "random";
+  const [resultRevealed, setResultRevealed] = useState(false);
+  const revealResult = useCallback(() => setResultRevealed(true), []);
   const done = room.phase === "finished",
     setup = room.phase === "setup";
   useEffect(() => {
@@ -412,7 +419,7 @@ export function DuelBoard({
     }
   }, [done]);
   const piece = me.pieces.find((p) => p.id === selectedPiece);
-  const placedPiece = me.placed.find((p) => p.id === selectedPiece);
+  const placedPiece = (me.placed || []).find((p) => p.id === selectedPiece);
   const cells =
     orientations[selectedPiece] ||
     rotateCells(placedPiece?.absCells || piece.cells, 0);
@@ -452,36 +459,46 @@ export function DuelBoard({
     }
     setOrientations((value) => ({ ...value, [selectedPiece]: next }));
   };
-  const canDraw = !done && !setup && !me.submitted;
+  const expired = room.phase === "final" && countdown === 0;
+  const canDraw = !done && !setup && !me.submitted && !expired;
+  const sendDraft = useRef(null);
   const latestDrawing = useRef(drawing);
   latestDrawing.current = drawing;
   useEffect(() => {
     if (!canDraw || !syncDrawing) return;
     const controller = new AbortController();
     let sent = "",
-      sending = false;
+      sending = false,
+      lastSentAt = -Infinity;
     const send = async () => {
       const current = latestDrawing.current,
         signature = JSON.stringify(current);
-      if (sending || signature === sent) return;
+      if (sending || signature === sent || performance.now() - lastSentAt < 350)
+        return;
       sending = true;
+      lastSentAt = performance.now();
       const result = await syncDrawing(room.id, current, controller.signal);
       if (result) sent = signature;
       sending = false;
     };
-    const timer = setInterval(send, 800);
+    sendDraft.current = send;
+    const timer = setInterval(send, 350);
     return () => {
+      sendDraft.current = null;
       clearInterval(timer);
       controller.abort();
     };
   }, [canDraw, room.id, syncDrawing]);
   useEffect(() => {
-    if (me.submitted && !done) {
+    void sendDraft.current?.();
+  }, [drawing, canDraw]);
+  useEffect(() => {
+    if (me.submitted && !done && !race) {
       setView("mine");
       setReplay(null);
       setSelectedQuery(null);
     }
-  }, [me.submitted, done]);
+  }, [me.submitted, done, race]);
   const myTurn =
     room.phase === "playing" &&
     !me.submitted &&
@@ -522,6 +539,7 @@ export function DuelBoard({
   };
   const canSubmit =
     !me.submitted &&
+    !expired &&
     (room.phase === "final" ||
       (room.phase === "playing" &&
         (race || room.turn === room.you || room.lastActor === room.you)));
@@ -647,19 +665,40 @@ export function DuelBoard({
   const status = setup
     ? "Arrange your board"
     : done
-      ? resultTitle
+      ? race && !resultRevealed
+        ? "Round complete"
+        : resultTitle
       : me.submitted
         ? `${opponent.name} is finishing…`
         : room.phase === "final"
-          ? "Final attempt · no more lasers"
+          ? expired
+            ? "Time’s up · checking your drawing"
+            : "Final attempt · no more lasers"
           : race
-            ? "Score race · Go!"
+            ? randomRace
+              ? "Random race"
+              : "Score race"
             : myTurn
               ? "Your turn"
               : `${opponent.name}'s turn`;
   return (
     <>
-      {done && resultOpen && (
+      {done && resultOpen && race && (
+        <RaceResultDialog
+          players={[me, opponent]}
+          title={resultTitle}
+          won={room.winner === room.you || room.winner === "draw"}
+          onReveal={revealResult}
+          onClose={() => {
+            revealResult();
+            setResultOpen(false);
+          }}
+          onNext={() => action({ type: "rematch" })}
+          nextLabel={rematchLabel}
+          nextDisabled={busy || room.rematch?.includes(room.you)}
+        />
+      )}
+      {done && resultOpen && !race && (
         <ResultDialog
           title={resultTitle}
           won={room.winner === room.you || room.winner === "draw"}
@@ -682,7 +721,15 @@ export function DuelBoard({
       <div className="duel-scoreline" aria-label="Room score">
         <span>{me.name}</span>
         <strong>
-          {room.wins?.[room.you] ?? 0} : {room.wins?.[1 - room.you] ?? 0}
+          {(room.wins?.[room.you] ?? 0) -
+            (done && race && !resultRevealed && room.winner === room.you
+              ? 1
+              : 0)}{" "}
+          :{" "}
+          {(room.wins?.[1 - room.you] ?? 0) -
+            (done && race && !resultRevealed && room.winner === 1 - room.you
+              ? 1
+              : 0)}
         </strong>
         <span>{opponent.name}</span>
       </div>
@@ -814,27 +861,39 @@ export function DuelBoard({
         </>
       ) : (
         <>
-          <div className="board-switch" role="group" aria-label="Choose board">
-            <button
-              aria-pressed={!ownBoard}
-              onClick={() => changeBoard(1 - room.you)}
+          {(!race || done) && (
+            <div
+              className="board-switch"
+              role="group"
+              aria-label="Choose board"
             >
-              <strong>{opponent.name}'s board</strong>
-              <small>{done ? "Your solution" : "Your drawing"}</small>
-            </button>
-            <button
-              aria-pressed={ownBoard}
-              onClick={() => changeBoard(room.you)}
-            >
-              <strong>Your board</strong>
-              <small>
-                {me.submitted || done
-                  ? `${opponent.name}'s drawing`
-                  : `${opponent.name}'s lasers`}
-              </small>
-            </button>
-          </div>
-          <div className="play-layout duel-play-layout">
+              <button
+                aria-pressed={!ownBoard}
+                onClick={() => changeBoard(1 - room.you)}
+              >
+                <strong>
+                  {randomRace ? "Your attempt" : `${opponent.name}'s board`}
+                </strong>
+                <small>{done ? "Your solution" : "Your drawing"}</small>
+              </button>
+              <button
+                aria-pressed={ownBoard}
+                onClick={() => changeBoard(room.you)}
+              >
+                <strong>
+                  {randomRace ? `${opponent.name}'s attempt` : "Your board"}
+                </strong>
+                <small>
+                  {me.submitted || done
+                    ? `${opponent.name}'s drawing`
+                    : `${opponent.name}'s lasers`}
+                </small>
+              </button>
+            </div>
+          )}
+          <div
+            className={`play-layout duel-play-layout ${race && !done ? "race-active" : ""}`}
+          >
             <section className="board-panel">
               <GameBoard
                 cols={cols}
@@ -911,9 +970,9 @@ export function DuelBoard({
                     </div>
                     <p className="comparison-legend">
                       {reviewMode === "overlay"
-                        ? `Filled: ${ownBoard ? "your" : opponent.name + "’s"} board · Dashed: ${ownBoard ? opponent.name + "’s" : "your"} drawing`
+                        ? `Filled: ${randomRace ? "shared" : ownBoard ? "your" : opponent.name + "’s"} board · Dashed: ${ownBoard ? opponent.name + "’s" : "your"} drawing`
                         : reviewMode === "solution"
-                          ? `${ownBoard ? "Your" : opponent.name + "’s"} original board`
+                          ? `${randomRace ? "Shared" : ownBoard ? "Your" : opponent.name + "’s"} original board`
                           : `${ownBoard ? opponent.name + "’s" : "Your"} submitted drawing`}
                     </p>
                   </>
@@ -940,7 +999,7 @@ export function DuelBoard({
 
                 {!done && (
                   <button
-                    className="primary"
+                    className="primary duel-submit"
                     disabled={!canSubmit || busy}
                     onClick={() => {
                       unlockAudio();
@@ -959,32 +1018,36 @@ export function DuelBoard({
                   </button>
                 )}
               </aside>
-              <div className="duel-logs">
-                {[room.you, 1 - room.you].map((shooter) => {
-                  const queries = room.queries
-                    .map((q, index) => ({ ...q, index }))
-                    .filter((q) => q.player === shooter);
-                  return (
-                    <QueryLog
-                      key={shooter}
-                      title={shooter === room.you ? "You" : opponent.name}
-                      history={queries}
-                      cols={cols}
-                      rows={rows}
-                      selected={
-                        queries.some((q) => q.index === selectedQuery)
-                          ? queries.findIndex((q) => q.index === selectedQuery)
-                          : null
-                      }
-                      selectionVersion={selectionVersion}
-                      onSelect={(i) => selectQuery(queries[i].index)}
-                    />
-                  );
-                })}
+              <div className={`duel-logs ${race ? "single-log" : ""}`}>
+                {(race ? [room.you] : [room.you, 1 - room.you]).map(
+                  (shooter) => {
+                    const queries = room.queries
+                      .map((q, index) => ({ ...q, index }))
+                      .filter((q) => q.player === shooter);
+                    return (
+                      <QueryLog
+                        key={shooter}
+                        title={shooter === room.you ? "You" : opponent.name}
+                        history={queries}
+                        cols={cols}
+                        rows={rows}
+                        selected={
+                          queries.some((q) => q.index === selectedQuery)
+                            ? queries.findIndex(
+                                (q) => q.index === selectedQuery,
+                              )
+                            : null
+                        }
+                        selectionVersion={selectionVersion}
+                        onSelect={(i) => selectQuery(queries[i].index)}
+                      />
+                    );
+                  },
+                )}
               </div>
               {done && (
                 <div className="secondary-tools duel-result-tools">
-                  {race && (
+                  {race && resultRevealed && (
                     <div className="round-points">
                       <span>
                         You <strong>{me.submission?.score ?? 0}</strong>

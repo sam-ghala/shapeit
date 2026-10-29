@@ -182,7 +182,7 @@ export class GameService {
               ? "read"
               : "write";
     const key = `${request.headers.get("X-Rate-Key")}:${category}`;
-    const limit = { create: 6, join: 20, read: 180, write: 120, draft: 180 }[
+    const limit = { create: 6, join: 20, read: 180, write: 120, draft: 400 }[
       category
     ];
     const current = [
@@ -324,7 +324,7 @@ export class GameService {
             seconds:
               p.submission?.seconds ??
               Math.floor((now - room.startedAt) / 1000),
-            ...(room.settings.mode === "race"
+            ...(["race", "random"].includes(room.settings.mode)
               ? { score: p.submission?.score ?? 0 }
               : {}),
           },

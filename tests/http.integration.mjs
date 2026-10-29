@@ -191,7 +191,8 @@ const firstRace = (
 ).room;
 assert.equal(firstRace.phase, "playing");
 assert.equal(firstRace.deadline, null);
-assert.deepEqual(firstRace.players[1].draft, raceDraft);
+assert.equal(firstRace.players[1].draft, undefined);
+assert.ok(firstRace.players.every((p) => p.placed === undefined));
 assert.equal((await raceRead(1)).room.players[0].submission, undefined);
 await raceAction(0, { type: "draft", drawing: raceDraft }, 400);
 const raceDone = (await raceAction(1, { type: "submit", drawing: raceDraft }))
@@ -215,6 +216,116 @@ await raceAction(
   { type: "draft", roundId: setupRace.id, drawing: raceDraft },
   400,
 );
+// Random races must not reveal either copy of the shared puzzle until finished.
+const randomCreated = await request("/api/rooms", {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Random host" },
+    mobile: true,
+  },
+  status: 201,
+});
+const randomCode = randomCreated.room.code;
+const randomJoined = await request(`/api/rooms/${randomCode}/join`, {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Random guest" },
+    mobile: false,
+  },
+});
+const randomTokens = [randomCreated.token, randomJoined.token];
+const randomAction = (i, body) =>
+  request(`/api/rooms/${randomCode}/action`, { token: randomTokens[i], body });
+await randomAction(0, {
+  type: "settings",
+  settings: { mode: "random", extras: true },
+});
+const randomStart = (await randomAction(0, { type: "start" })).room;
+assert.equal(randomStart.phase, "playing");
+assert.ok(randomStart.players.every((p) => p.ready && p.placed === undefined));
+const randomShots = [];
+for (let i = 0; i < 2; i++) {
+  const v = (await randomAction(i, { type: "laser", side: "top", idx: 0 }))
+    .room;
+  assert.equal(v.queries.length, 1);
+  assert.equal(v.queries[0].player, i);
+  const { player, ...shot } = v.queries[0];
+  randomShots.push(shot);
+}
+assert.deepEqual(randomShots[0], randomShots[1]);
+await randomAction(0, {
+  type: "submit",
+  drawing: { guess: emptyBoard(7, 5), edges: {} },
+});
+const randomEnd = (
+  await randomAction(1, {
+    type: "submit",
+    drawing: { guess: emptyBoard(7, 5), edges: {} },
+  })
+).room;
+assert.equal(randomEnd.phase, "finished");
+assert.deepEqual(randomEnd.players[0].placed, randomEnd.players[1].placed);
+await randomAction(0, { type: "rematch" });
+const randomRematch = (await randomAction(1, { type: "rematch" })).room;
+assert.equal(randomRematch.phase, "playing");
+assert.notEqual(randomRematch.id, randomStart.id);
+assert.ok(randomRematch.players.every((p) => p.placed === undefined));
+
+// Real deadline: a saved correct final drawing is submitted automatically.
+const timeoutCreated = await request("/api/rooms", {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Timeout host" },
+    mobile: true,
+  },
+  status: 201,
+});
+const timeoutCode = timeoutCreated.room.code;
+const timeoutJoined = await request(`/api/rooms/${timeoutCode}/join`, {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Timeout guest" },
+    mobile: true,
+  },
+});
+const timeoutTokens = [timeoutCreated.token, timeoutJoined.token];
+const timeoutAction = (i, body) =>
+  request(`/api/rooms/${timeoutCode}/action`, {
+    token: timeoutTokens[i],
+    body,
+  });
+const timeoutSetup = (await timeoutAction(0, { type: "start" })).room;
+const timeoutBoards = timeoutSetup.players.map(
+  (p, i) => generatePuzzle(`timeout:${i}`, p.pieces, 7, 5).placed,
+);
+await timeoutAction(0, { type: "ready", placed: timeoutBoards[0] });
+const timeoutPlaying = (
+  await timeoutAction(1, { type: "ready", placed: timeoutBoards[1] })
+).room;
+const firstTimeout = timeoutPlaying.turn,
+  lastTimeout = 1 - firstTimeout;
+const timeoutFinal = (
+  await timeoutAction(firstTimeout, {
+    type: "submit",
+    drawing: solutionDrawing(timeoutBoards[lastTimeout], 7, 5),
+  })
+).room;
+const finalDrawing = solutionDrawing(timeoutBoards[firstTimeout], 7, 5);
+await timeoutAction(lastTimeout, {
+  type: "draft",
+  drawing: finalDrawing,
+  roundId: timeoutFinal.id,
+});
+console.log("Waiting for the real final-attempt deadline…");
+await new Promise((resolve) =>
+  setTimeout(resolve, Math.max(0, timeoutFinal.deadline - Date.now() + 100)),
+);
+const timeoutDone = (
+  await request(`/api/rooms/${timeoutCode}`, { token: timeoutTokens[0] })
+).room;
+assert.equal(timeoutDone.phase, "finished");
+assert.equal(timeoutDone.winner, "draw");
+assert.equal(timeoutDone.players[lastTimeout].submission.automatic, true);
+assert.deepEqual(
+  timeoutDone.players[lastTimeout].submission.drawing,
+  finalDrawing,
+);
 const manifest = await fetch(base + "/manifest.webmanifest").then((r) =>
   r.json(),
 );
@@ -229,5 +340,5 @@ const sw = await fetch(base + "/sw.js").then((r) => r.text());
 assert.match(sw, /shapeit-/);
 assert.match(sw, /\/api\//);
 console.log(
-  `PASS: ${calls} API requests; real Durable Object rooms, both duel modes, private drafts, server scoring, persistent rematch wins, auth, activity deduplication and install assets.`,
+  `PASS: ${calls} API requests; real Durable Object rooms, all three duel modes, private drafts, server scoring, persistent rematch wins, auth, activity deduplication and install assets.`,
 );

@@ -1895,3 +1895,176 @@ body,
     display: none;
   }
 }
+/* Race results share one scale and one animation clock. */
+.duel-logs.single-log {
+  grid-template-columns: minmax(0, 1fr);
+}
+.duel-mode-choice {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.race-result-dialog {
+  max-width: min(560px, calc(100vw - 24px));
+  text-align: center;
+}
+.race-meters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 18px 0 8px;
+}
+.race-meter-card {
+  min-width: 0;
+}
+.race-meter-card h3 {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.race-points {
+  display: block;
+  font-size: 32px;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+}
+.race-meter-track {
+  height: 190px;
+  background: #edf1f5;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto 10px;
+  max-width: 140px;
+}
+.race-meter-track > div {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: repeating-linear-gradient(
+    135deg,
+    #65c9ea 0 12px,
+    #83d5ee 12px 24px
+  );
+}
+.player-1 .race-meter-track > div {
+  background: repeating-linear-gradient(
+    135deg,
+    #ffbe52 0 12px,
+    #ffd37c 12px 24px
+  );
+}
+.race-meter-card p {
+  min-height: 40px;
+  font-size: 13px;
+}
+.race-result-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.race-result-actions button {
+  padding: 8px;
+  font-size: 16px;
+}
+.tutorial-target {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 12px 0;
+}
+.tutorial-target strong {
+  font-size: 16px;
+}
+.tutorial-success {
+  text-align: center;
+  max-width: 350px;
+}
+.tutorial-success .primary {
+  margin-top: 18px;
+}
+@media (max-width: 860px) {
+  .duel-shell .topbar {
+    margin-bottom: 5px;
+    gap: 5px;
+  }
+  .duel-shell .topbar h1 {
+    font-size: 19px;
+  }
+  .duel-shell .topbar .menu-back {
+    min-height: 36px;
+    width: 36px;
+    padding: 5px;
+  }
+  .duel-shell .duel-scoreline {
+    margin: 0 0 5px;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .duel-shell .duel-scoreline > strong {
+    font-size: 18px;
+  }
+  .duel-shell .turn-banner {
+    padding: 5px 10px;
+    margin-bottom: 6px;
+    min-height: 34px;
+  }
+  .duel-shell .turn-banner strong {
+    font-size: 14px;
+  }
+  .duel-shell .board-switch {
+    margin: 6px 0 8px;
+    gap: 8px;
+  }
+  .duel-shell .board-switch button {
+    padding: 5px 8px;
+    min-height: 38px;
+    gap: 1px;
+  }
+  .duel-shell .board-switch strong {
+    font-size: 13px;
+  }
+  .duel-shell .board-switch small {
+    font-size: 10px;
+  }
+  .duel-sidebar,
+  .duel-sidebar .tools-panel {
+    gap: 6px;
+  }
+  .duel-sidebar .piece-choice {
+    min-height: 30px;
+  }
+  .duel-sidebar .piece-choice svg {
+    max-height: 36px;
+  }
+  .duel-sidebar .color-picker {
+    gap: 9px;
+    padding: 0;
+  }
+  .duel-sidebar .color-picker button {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+  .duel-sidebar .duel-submit {
+    padding: 6px 12px;
+    min-height: 38px;
+  }
+  .duel-logs .query-log {
+    padding: 9px 6px;
+    min-height: 210px;
+    max-height: 360px;
+  }
+  .duel-logs .query-log h3 {
+    font-size: 14px;
+    margin-bottom: 5px;
+  }
+  .duel-mode-choice {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+  .duel-mode-choice button {
+    padding: 8px 10px;
+    gap: 2px;
+  }
+}

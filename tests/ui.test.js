@@ -488,7 +488,10 @@ test("tutorial uses the live game's animated board and query log, including reve
   });
   try {
     assert.ok(!text(view.root).includes("Advanced"));
-    const board = () => view.root.findByProps({ className: "game-board" });
+    const board = () =>
+      view.root
+        .findByProps({ hidden: false })
+        .findByProps({ className: "game-board" });
     act(() =>
       board().findByProps({ "aria-label": "Fire laser 1" }).props.onClick(),
     );
@@ -504,7 +507,7 @@ test("tutorial uses the live game's animated board and query log, including reve
     assert.ok(
       view.root.findAll((n) => n.props.className === "query-route").length >= 2,
     );
-    act(() => button(view, "Try drawing").props.onClick());
+    act(() => button(view, "Try game").props.onClick());
     assert.equal(board().findAllByType("polyline").length, 0);
     act(() =>
       board().findByProps({ "aria-label": "Fire laser 1" }).props.onClick(),
@@ -664,7 +667,7 @@ test("duel splits player logs, clearly signals turns and shows opponent shots on
   assert.equal(duelBoard(rendered).props.newLaserLocked, true);
   act(() => rendered.unmount());
 });
-test("race allows either player to fire and first submitter spectates live drawings without exposing solutions", () => {
+test("race allows independent shots but never displays the other board, logs or live drawing", () => {
   entries.clear();
   const room = duelFixture("race");
   room.turn = 1;
@@ -681,9 +684,19 @@ test("race allows either player to fire and first submitter spectates live drawi
   duel.applyAction(room, 1, { type: "draft", drawing: draft }, 6000);
   act(() => rendered.update(React.createElement(DuelBoard, duelProps(room))));
   assert.ok(text(rendered.root).includes("Sam is finishing"));
-  assert.deepEqual(duelBoard(rendered).props.revealed, room.players[0].placed);
-  assert.deepEqual(duelBoard(rendered).props.edges, draft.edges);
-  assert.equal(duelBoard(rendered).props.drawingDashed, true);
+  assert.equal(duelBoard(rendered).props.revealed, null);
+  assert.deepEqual(duelBoard(rendered).props.edges, {});
+  assert.equal(duelBoard(rendered).props.drawingDashed, false);
+  assert.equal(
+    rendered.root.findAllByProps({ "aria-label": "Choose board" }).length,
+    0,
+  );
+  assert.equal(
+    rendered.root.findAll(
+      (n) => typeof n.type === "function" && n.type.name === "QueryLog",
+    ).length,
+    1,
+  );
   assert.equal(duelBoard(rendered).props.locked, true);
   assert.equal(button(rendered, "Solution locked").props.disabled, true);
   act(() => rendered.unmount());
@@ -700,7 +713,7 @@ test("finished duel has board buttons and distinct original, overlay and submitt
   );
   duel.applyAction(room, 1, { type: "submit", drawing: wrong }, 124000);
   const rendered = mount(DuelBoard, duelProps(room));
-  act(() => button(rendered, "See board").props.onClick());
+  act(() => rendered.root.findByType("dialog").props.onCancel());
   assert.equal(rendered.root.findAllByType("select").length, 0);
   const choices = rendered.root
     .findByProps({ "aria-label": "Choose board" })
@@ -731,7 +744,7 @@ test("duel sync sends changed drawings with the round identity and stops immedia
   let syncTick;
   const originalInterval = globalThis.setInterval;
   globalThis.setInterval = (fn, ms) => {
-    if (ms === 800) syncTick = fn;
+    if (ms === 350) syncTick = fn;
     return originalInterval(fn, ms);
   };
   const syncDrawing = async (roundId, drawing, signal) => {
@@ -755,6 +768,7 @@ test("duel sync sends changed drawings with the round identity and stops immedia
   assert.equal(sent.length, 1);
   act(() => duelBoard(rendered).props.onCell(0, 0));
   await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 370));
     await syncTick();
   });
   assert.equal(sent.length, 2);
@@ -767,4 +781,122 @@ test("duel sync sends changed drawings with the round identity and stops immedia
   );
   assert.equal(sent[1].signal.aborted, true);
   act(() => rendered.unmount());
+});
+
+test("Try game shows its target, keeps the drawing between tabs and celebrates the exact solution", async () => {
+  const Guide = await component(
+    "src/components/HowToPlayModal.jsx",
+    "HowToPlayModal",
+  );
+  const props = { onClose() {}, pieces: buildPieces(42, "compact", false) };
+  let rendered = mount(Guide, props);
+  try {
+    assert.ok(text(rendered.root).includes("Explore laser paths"));
+    act(() => button(rendered, "Try game").props.onClick());
+    assert.ok(
+      text(
+        rendered.root.findByProps({ className: "tutorial-target" }),
+      ).includes("red triangle"),
+    );
+    const board = () =>
+      rendered.root
+        .findByProps({ hidden: false })
+        .findAll(
+          (n) => typeof n.type === "function" && n.type.name === "GameBoard",
+        )[0];
+    act(() => board().props.onCell(1, 2));
+    act(() => button(rendered, "Try lasers").props.onClick());
+    act(() => button(rendered, "Try game").props.onClick());
+    assert.deepEqual(board().props.guess[1][2], { color: "red", type: "\\" });
+    act(() => board().props.onCell(1, 2));
+    act(() => board().props.onCell(2, 1));
+    act(() => board().props.onCell(2, 1));
+    const solution = solutionDrawing(
+      [
+        {
+          color: "red",
+          absCells: [
+            [1, 1, "\\f"],
+            [1, 2, "/"],
+            [2, 1, "/"],
+          ],
+        },
+      ],
+      4,
+      3,
+    );
+    for (const edge of Object.keys(solution.edges))
+      act(() => board().props.onEdge(edge));
+    assert.equal(board().props.locked, true);
+    assert.ok(rendered.root.findByProps({ "aria-label": "Good job!" }));
+    assert.ok(text(rendered.root).includes("You are ready to play."));
+    act(() => button(rendered, "Continue").props.onClick());
+    act(() => rendered.unmount());
+    rendered = mount(Guide, props);
+    act(() => button(rendered, "Try game").props.onClick());
+    assert.deepEqual(board().props.guess, emptyBoard(4, 3));
+  } finally {
+    act(() => rendered.unmount());
+  }
+});
+
+const RaceResultDialog = await component(
+  "src/components/RaceResultDialog.jsx",
+  "RaceResultDialog",
+);
+test("race meters animate together, show incorrect as zero and reveal the verdict only when complete", async () => {
+  let revealed = 0;
+  const rendered = mount(RaceResultDialog, {
+    players: [
+      { name: "Robin", submission: { score: 4200, correct: true } },
+      { name: "Sam", submission: { score: 0, correct: false } },
+    ],
+    title: "You won!",
+    won: true,
+    onReveal() {
+      revealed++;
+    },
+    onClose() {},
+    onNext() {},
+    nextLabel: "Rematch",
+  });
+  try {
+    assert.equal(
+      rendered.root.findByType("dialog").props["aria-label"],
+      "Counting points…",
+    );
+    assert.equal(text(rendered.root).includes("You won!"), false);
+    assert.deepEqual(
+      rendered.root
+        .findAllByProps({ role: "progressbar" })
+        .map((n) => n.props["aria-valuenow"]),
+      [0, 0],
+    );
+    await act(
+      async () => await new Promise((resolve) => setTimeout(resolve, 400)),
+    );
+    const interim = rendered.root
+      .findAllByProps({ role: "progressbar" })
+      .map((n) => n.props["aria-valuenow"]);
+    assert.ok(interim[0] > 0 && interim[0] < 4200);
+    assert.equal(interim[1], 0);
+    assert.equal(revealed, 0);
+    await act(
+      async () => await new Promise((resolve) => setTimeout(resolve, 2750)),
+    );
+    assert.deepEqual(
+      rendered.root
+        .findAllByProps({ role: "progressbar" })
+        .map((n) => n.props["aria-valuenow"]),
+      [4200, 0],
+    );
+    assert.ok(revealed > 0);
+    assert.ok(text(rendered.root).includes("Incorrect · 0 points"));
+    assert.equal(
+      rendered.root.findByType("dialog").props["aria-label"],
+      "You won!",
+    );
+  } finally {
+    act(() => rendered.unmount());
+  }
 });

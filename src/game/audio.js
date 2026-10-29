@@ -86,6 +86,7 @@ export function resultSound(
   duration = RESULT_DURATION,
   onStart = () => {},
   enabled = true,
+  countUp = false,
 ) {
   let cancelled = false,
     started = false,
@@ -98,7 +99,7 @@ export function resultSound(
     try {
       if (audio && enabled && getSoundEnabled()) {
         const now = audio.currentTime;
-        if (won) {
+        if (won || countUp) {
           const notes = [392, 440, 494, 523, 587, 659, 740, 784];
           if (duration > 0)
             notes.forEach((frequency, i) => {
@@ -106,12 +107,15 @@ export function resultSound(
               const at = duration * (1 - Math.cbrt(1 - progress));
               stops.push(tone(audio, frequency, now + at, 0.09, 0.022));
             });
-          [523.25, 659.25, 783.99].forEach((frequency) =>
-            stops.push(tone(audio, frequency, now + duration, 0.24, 0.018)),
-          );
-        } else {
-          stops.push(tone(audio, 294, now, 0.14, 0.028, 261));
-          stops.push(tone(audio, 196, now + 0.16, 0.24, 0.024, 164));
+          if (won)
+            [523.25, 659.25, 783.99].forEach((frequency) =>
+              stops.push(tone(audio, frequency, now + duration, 0.24, 0.018)),
+            );
+        }
+        if (!won) {
+          const end = now + (countUp ? duration : 0);
+          stops.push(tone(audio, 294, end, 0.14, 0.028, 261));
+          stops.push(tone(audio, 196, end + 0.16, 0.24, 0.024, 164));
         }
       }
     } catch {

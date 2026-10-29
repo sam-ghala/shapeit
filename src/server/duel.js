@@ -1,6 +1,8 @@
 import { normalizeExtras } from "../game/extras.js";
 import {
   SIZES,
+  generatePuzzle,
+  emptyBoard,
   buildPieces,
   validatePlacements,
   boardFromPlaced,
@@ -28,7 +30,7 @@ export function cleanProfile(input) {
 export function roomSettings(input = {}) {
   return {
     sameShapes: true,
-    mode: input.mode === "race" ? "race" : "turns",
+    mode: ["race", "random"].includes(input.mode) ? input.mode : "turns",
     extras: normalizeExtras(input.extras),
   };
 }
@@ -86,7 +88,22 @@ export function advanceRoom(room, now = Date.now()) {
     room.lastActor = null;
     room.deadline = null;
   }
-  const race = room.settings.mode === "race";
+  const race = ["race", "random"].includes(room.settings.mode);
+  if (!race && room.phase === "final" && now >= room.deadline) {
+    const { cols, rows } = SIZES[room.size];
+    room.players.forEach((p, index) => {
+      if (p.submission === null) {
+        p.submission = evaluateSubmission(
+          room,
+          index,
+          p.draft || { guess: emptyBoard(cols, rows), edges: {} },
+          room.deadline,
+        );
+        p.submission.automatic = true;
+      }
+    });
+  }
+
   if (
     (race &&
       room.phase === "playing" &&
@@ -150,6 +167,33 @@ function validateDrawing(drawing, cols, rows) {
   return structuredClone({ guess: drawing.guess, edges: drawing.edges });
 }
 
+function evaluateSubmission(room, index, drawing, now) {
+  const { cols, rows } = SIZES[room.size];
+  const correct = drawing
+    ? checkSolution(
+        drawing.guess,
+        drawing.edges,
+        room.players[1 - index].placed,
+        cols,
+        rows,
+      )
+    : false;
+  const seconds = Math.max(0, Math.floor((now - room.startedAt) / 1000));
+  const queries = room.queries.filter((q) => q.player === index).length;
+  const points = correct
+    ? scoreBreakdown(seconds, queries, room.settings.extras)
+    : { total: 0, bonus: 0 };
+  return {
+    drawing: structuredClone(drawing),
+    correct,
+    seconds,
+    queries,
+    score: points.total,
+    bonus: points.bonus,
+    at: now,
+  };
+}
+
 export function applyAction(room, index, action, now = Date.now()) {
   advanceRoom(room, now);
   const p = room.players[index],
@@ -157,7 +201,7 @@ export function applyAction(room, index, action, now = Date.now()) {
   if (!p) throw new Error("Room access denied.");
   if (action.roundId && action.roundId !== room.id)
     throw new Error("This round has ended. Refresh the room.");
-  const race = room.settings.mode === "race";
+  const race = ["race", "random"].includes(room.settings.mode);
   switch (action.type) {
     case "rematch": {
       if (room.phase !== "finished")
@@ -207,6 +251,19 @@ export function applyAction(room, index, action, now = Date.now()) {
       room.starter = crypto.getRandomValues(new Uint8Array(1))[0] % 2;
       room.phase = "setup";
       room.deadline = null;
+      if (room.settings.mode === "random") {
+        // This seed is never sent to clients: knowing the room ID cannot reveal the puzzle.
+        const placed = generatePuzzle(
+          crypto.randomUUID(),
+          room.players[0].pieces,
+          cols,
+          rows,
+        ).placed;
+        for (const member of room.players) {
+          member.placed = structuredClone(placed);
+          member.ready = true;
+        }
+      }
       break;
     }
     case "place":
@@ -282,29 +339,7 @@ export function applyAction(room, index, action, now = Date.now()) {
         action.type === "pass"
           ? null
           : validateDrawing(action.drawing, cols, rows);
-      const correct = drawing
-        ? checkSolution(
-            drawing.guess,
-            drawing.edges,
-            room.players[1 - index].placed,
-            cols,
-            rows,
-          )
-        : false;
-      const seconds = Math.max(0, Math.floor((now - room.startedAt) / 1000));
-      const queries = room.queries.filter((q) => q.player === index).length;
-      const points = correct
-        ? scoreBreakdown(seconds, queries, room.settings.extras)
-        : { total: 0, bonus: 0 };
-      p.submission = {
-        drawing,
-        correct,
-        seconds,
-        queries,
-        score: points.total,
-        bonus: points.bonus,
-        at: now,
-      };
+      p.submission = evaluateSubmission(room, index, drawing, now);
       if (!race && room.phase === "playing") {
         room.phase = "final";
         room.deadline = now + FINAL_MS;
@@ -320,6 +355,7 @@ export function applyAction(room, index, action, now = Date.now()) {
 }
 export function roomView(room, index, now = Date.now()) {
   const done = room.phase === "finished";
+  const race = ["race", "random"].includes(room.settings.mode);
   return {
     code: room.code,
     id: room.id,
@@ -337,18 +373,25 @@ export function roomView(room, index, now = Date.now()) {
     wins: room.wins || [0, 0],
     startedAt: room.startedAt ?? null,
     rematch: room.rematch || [],
-    queries: room.queries,
+    queries: race
+      ? room.queries.filter((q) => q.player === index)
+      : room.queries,
     players: room.players.map((p, i) => ({
       name: p.name,
       mobile: p.mobile,
       ready: p.ready,
       pieces: p.pieces,
       submitted: p.submission !== null,
-      ...(i === index || done ? { placed: p.placed } : {}),
+      ...(done || (i === index && (!race || room.phase === "setup"))
+        ? { placed: p.placed }
+        : {}),
       ...(done ? { submission: p.submission } : {}),
       ...(i === index && p.submission ? { submittedAt: p.submission.at } : {}),
       // Only a player whose own attempt is irreversibly locked may spectate.
-      ...(!done && i !== index && room.players[index].submission !== null
+      ...(!race &&
+      !done &&
+      i !== index &&
+      room.players[index].submission !== null
         ? { draft: p.submission?.drawing || p.draft || null }
         : {}),
     })),

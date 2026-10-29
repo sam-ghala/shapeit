@@ -336,7 +336,7 @@ test("race compares final scores, not submission order; ties and incorrect solut
   }
 });
 test("live drawings stay private until the viewer submits and stay locked after submission", () => {
-  for (const r of [playing(), raceRoom()]) {
+  for (const r of [playing()]) {
     const first = r.turn,
       other = 1 - first;
     const draft = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
@@ -400,4 +400,90 @@ test("room wins survive rematch and reconnect; stale round actions cannot alter 
   );
   applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 131000);
   assert.deepEqual(roomView(r, 1).wins, [1, 1]);
+});
+
+test("final deadline submits and grades the last saved drawing at the deadline, once", () => {
+  for (const complete of [true, false]) {
+    const room = playing(),
+      first = room.turn,
+      other = 1 - first;
+    const drawing = complete
+      ? correct(room, other)
+      : { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
+    applyAction(
+      room,
+      first,
+      { type: "submit", drawing: correct(room, first) },
+      5000,
+    );
+    applyAction(room, other, { type: "draft", drawing }, 5000 + FINAL_MS - 1);
+    advanceRoom(room, 5000 + FINAL_MS + 10000);
+    assert.equal(room.phase, "finished");
+    assert.deepEqual(room.players[other].submission.drawing, drawing);
+    assert.equal(room.players[other].submission.automatic, true);
+    assert.equal(room.players[other].submission.at, 5000 + FINAL_MS);
+    assert.equal(room.players[other].submission.correct, complete);
+    assert.equal(room.winner, complete ? "draw" : first);
+    const wins = [...room.wins];
+    advanceRoom(room, 999999);
+    assert.deepEqual(room.wins, wins);
+  }
+});
+test("both race modes filter opponent logs, layouts and drafts even after first submission", () => {
+  for (const mode of ["race", "random"]) {
+    const r =
+      mode === "race"
+        ? raceRoom()
+        : createRoom("1234", profiles[0], true, { mode }, 1000);
+    if (mode === "random") {
+      joinRoom(r, profiles[1], false);
+      applyAction(r, 0, { type: "start" }, 3000);
+    }
+    for (let i = 0; i < 2; i++)
+      applyAction(r, i, { type: "laser", side: "top", idx: 0 }, 4000);
+    applyAction(r, 1, { type: "draft", drawing: correct(r, 1) }, 4500);
+    for (let i = 0; i < 2; i++) {
+      const v = roomView(r, i, 4500);
+      assert.equal(v.queries.length, 1);
+      assert.equal(v.queries[0].player, i);
+      assert.ok(
+        v.players.every((p) => p.placed === undefined && p.draft === undefined),
+      );
+    }
+    applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 5000);
+    assert.equal(roomView(r, 0).players[1].draft, undefined);
+    assert.equal(roomView(r, 0).players[1].placed, undefined);
+    applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 6000);
+    assert.ok(roomView(r, 0).players[1].submission);
+    assert.equal(roomView(r, 0).queries.length, 1);
+  }
+});
+test("random race skips placement, shares a legal secret board and generates a fresh rematch", () => {
+  for (const mobile of [false, true]) {
+    const r = createRoom(
+      "1234",
+      profiles[0],
+      mobile,
+      { mode: "random", extras: true },
+      1000,
+    );
+    joinRoom(r, profiles[1], mobile);
+    applyAction(r, 0, { type: "start" }, 2000);
+    assert.equal(r.phase, "playing");
+    assert.equal(r.startedAt, 2000);
+    assert.deepEqual(r.players[0].placed, r.players[1].placed);
+    assert.ok(r.players.every((p) => p.ready));
+    assert.throws(() => applyAction(r, 0, { type: "place", placed: [] }, 2500));
+    const original = structuredClone(r.players[0].placed);
+    applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 62000);
+    applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 122000);
+    assert.equal(r.winner, 0);
+    applyAction(r, 0, { type: "rematch" }, 123000);
+    applyAction(r, 1, { type: "rematch" }, 123001);
+    assert.equal(r.phase, "playing");
+    assert.deepEqual(r.wins, [1, 0]);
+    assert.deepEqual(r.players[0].placed, r.players[1].placed);
+    assert.notDeepEqual(r.players[0].placed, original);
+    assert.equal(roomView(r, 0).players[0].placed, undefined);
+  }
 });

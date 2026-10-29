@@ -2,7 +2,7 @@ import { GameBoard } from "./GameBoard.jsx";
 import { QueryLog, ColorPicker } from "./GameControls.jsx";
 import { playSound } from "../game/audio.js";
 import { emptyBoard } from "../game/engine.js";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { PCOLORS } from "../constants/gameConstants";
 import { fillPoints } from "../utils/gameUtils";
 import { fireLaser as traceLaser, checkSolution } from "../game/engine.js";
@@ -89,10 +89,15 @@ function TrainingAndExample() {
           aria-pressed={mode === "example"}
           onClick={() => setMode("example")}
         >
-          Try drawing
+          Try game
         </button>
       </div>
-      {mode === "training" ? <TrainingMode /> : <ExampleMode />}
+      <div hidden={mode !== "training"}>
+        <TrainingMode />
+      </div>
+      <div hidden={mode !== "example"}>
+        <ExampleMode active={mode === "example"} />
+      </div>
     </div>
   );
 }
@@ -117,7 +122,10 @@ function TrainingMode() {
   };
   return (
     <div>
-      <p className="guide-instruction">Tap a label to follow its laser.</p>
+      <p className="guide-instruction">
+        Explore laser paths here — this is not a puzzle. Tap a label to see how
+        a laser reflects.
+      </p>
       <GameBoard
         cols={TRAIN_COLS}
         rows={TRAIN_ROWS}
@@ -143,7 +151,8 @@ function TrainingMode() {
   );
 }
 
-function ExampleMode() {
+function ExampleMode({ active: visible }) {
+  const [celebrate, setCelebrate] = useState(false);
   const [guess, setGuess] = useState(() => emptyBoard(EX_COLS, EX_ROWS));
   const [edges, setEdges] = useState({});
   const [color, setColor] = useState("red");
@@ -162,6 +171,9 @@ function ExampleMode() {
       ),
     [guess, edges],
   );
+  useEffect(() => {
+    if (solved) setCelebrate(true);
+  }, [solved]);
   const fire = (side, idx) => {
     playSound("laser");
     const shot = { ...traceLaser(EX_BOARD, side, idx), side, idx };
@@ -177,11 +189,25 @@ function ExampleMode() {
   };
   return (
     <div>
-      <p className="guide-instruction">
-        {solved
-          ? "Solved! Try the lasers again."
-          : "Find and draw the red triangle."}
-      </p>
+      {celebrate && visible && (
+        <Dialog
+          title="Good job!"
+          className="tutorial-success"
+          onClose={() => setCelebrate(false)}
+        >
+          <p>You are ready to play.</p>
+          <button className="primary" onClick={() => setCelebrate(false)}>
+            Continue
+          </button>
+        </Dialog>
+      )}
+      <div className="tutorial-target">
+        <PiecePreview piece={EX_PIECE} size={24} found={false} />
+        <strong>Find this red triangle</strong>
+      </div>
+      {solved && (
+        <p className="guide-instruction">Solved! Try the lasers again.</p>
+      )}
       <GameBoard
         cols={EX_COLS}
         rows={EX_ROWS}
