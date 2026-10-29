@@ -848,8 +848,14 @@ test("race meters animate together, show incorrect as zero and reveal the verdic
   let revealed = 0;
   const rendered = mount(RaceResultDialog, {
     players: [
-      { name: "Robin", submission: { score: 4200, correct: true } },
-      { name: "Sam", submission: { score: 0, correct: false } },
+      {
+        name: "Robin",
+        submission: { score: 4200, correct: true, queries: 8, seconds: 125 },
+      },
+      {
+        name: "Sam",
+        submission: { score: 0, correct: false, queries: 11, seconds: 183 },
+      },
     ],
     title: "You won!",
     won: true,
@@ -866,6 +872,8 @@ test("race meters animate together, show incorrect as zero and reveal the verdic
       "Counting points…",
     );
     assert.equal(text(rendered.root).includes("You won!"), false);
+    assert.ok(text(rendered.root).includes("8 lasers2:05"));
+    assert.ok(text(rendered.root).includes("11 lasers3:03"));
     assert.deepEqual(
       rendered.root
         .findAllByProps({ role: "progressbar" })
@@ -898,5 +906,144 @@ test("race meters animate together, show incorrect as zero and reveal the verdic
     );
   } finally {
     act(() => rendered.unmount());
+  }
+});
+
+const AdminPage = await component("src/components/AdminPage.jsx", "AdminPage");
+test("admin lists distinct player IDs, searches names and requests activity for the selected player", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls = [];
+  const events = [
+    {
+      id: "one",
+      profileId: "player-one",
+      name: "Sam",
+      mode: "daily",
+      size: "compact",
+      kind: "finish",
+      occurredAt: "2026-10-29T12:00:00Z",
+    },
+    {
+      id: "two",
+      profileId: "player-two",
+      name: "Robin",
+      mode: "training",
+      size: "classic",
+      kind: "start",
+      occurredAt: "2026-10-29T11:00:00Z",
+    },
+  ];
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    const player = new URL(url, "https://shapeit.test").searchParams.get(
+      "player",
+    );
+    return Response.json({
+      players: events.map((e) => ({
+        profileId: e.profileId,
+        name: e.name,
+        games: 1,
+        finishes: e.kind === "finish" ? 1 : 0,
+        lastPlayed: e.occurredAt,
+      })),
+      events: events.filter((e) => !player || e.profileId === player),
+    });
+  };
+  const rendered = mount(AdminPage, { onHome() {} });
+  try {
+    act(() =>
+      rendered.root
+        .findByProps({ type: "password" })
+        .props.onChange({ target: { value: "Admin" } }),
+    );
+    await act(async () =>
+      rendered.root.findByType("form").props.onSubmit({ preventDefault() {} }),
+    );
+    const playerList = () =>
+      rendered.root.findByProps({ className: "admin-player-list" });
+    assert.equal(playerList().findAllByType("li").length, 2);
+    act(() =>
+      rendered.root
+        .findByProps({ type: "search" })
+        .props.onChange({ target: { value: "rob" } }),
+    );
+    assert.equal(playerList().findAllByType("li").length, 1);
+    assert.ok(text(playerList()).includes("Robin"));
+    await act(async () => {
+      playerList().findByType("button").props.onClick();
+      await Promise.resolve();
+    });
+    assert.equal(calls.at(-1), "/api/admin/events?player=player-two");
+    assert.equal(
+      rendered.root.findByType("tbody").findAllByType("tr").length,
+      1,
+    );
+    assert.ok(text(rendered.root.findByType("tbody")).includes("Robin"));
+    await act(async () => {
+      button(rendered, "All players").props.onClick();
+      await Promise.resolve();
+    });
+    assert.equal(
+      rendered.root.findByType("tbody").findAllByType("tr").length,
+      2,
+    );
+    act(() => button(rendered, "Sign out").props.onClick());
+    assert.ok(rendered.root.findByProps({ type: "password" }));
+  } finally {
+    act(() => rendered.unmount());
+    globalThis.fetch = previousFetch;
+  }
+});
+
+const DuelGame = await component("src/components/DuelGame.jsx", "DuelGame");
+test("leave room works even while reconnecting and ignores a late server response", async () => {
+  entries.clear();
+  const previousFetch = globalThis.fetch;
+  const previousHistory = window.history;
+  const previousLocation = window.location;
+  const requests = [];
+  let resolvePoll,
+    home = 0;
+  window.history = { replaceState() {} };
+  window.location = { origin: "https://shapeit.test" };
+  writeJSON("shapeit:room", {
+    code: "2468",
+    token: "test-token",
+    profileId: "host-test",
+  });
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, options });
+    if (options.method === "GET")
+      return new Promise((resolve) => {
+        resolvePoll = resolve;
+      });
+    return Promise.resolve(Response.json({ room: { phase: "closed" } }));
+  };
+  const rendered = mount(DuelGame, {
+    profile: { id: "host-test", name: "Robin" },
+    onProfileChange() {},
+    mobile: false,
+    onHome() {
+      home++;
+    },
+    effects: false,
+  });
+  try {
+    assert.ok(text(rendered.root).includes("Reconnecting"));
+    act(() => button(rendered, "Leave room").props.onClick());
+    assert.equal(home, 1);
+    assert.equal(readJSON("shapeit:room", "missing"), null);
+    assert.equal(JSON.parse(requests.at(-1).options.body).type, "leave");
+    await act(async () => {
+      resolvePoll(Response.json({ room: duel.roomView(duelFixture(), 0) }));
+      await Promise.resolve();
+    });
+    assert.ok(button(rendered, "Create room"));
+    assert.equal(readJSON("shapeit:room", "missing"), null);
+  } finally {
+    act(() => rendered.unmount());
+    globalThis.fetch = previousFetch;
+    window.history = previousHistory;
+    window.location = previousLocation;
   }
 });

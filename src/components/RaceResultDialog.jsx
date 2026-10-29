@@ -76,6 +76,16 @@ export function RaceResultDialog({
               >
                 <div style={{ height: `${value / 100}%` }} />
               </div>
+              <div className="race-stats">
+                <span>{player.submission?.queries ?? 0} lasers</span>
+                <span>
+                  {Math.floor((player.submission?.seconds ?? 0) / 60)}:
+                  {String((player.submission?.seconds ?? 0) % 60).padStart(
+                    2,
+                    "0",
+                  )}
+                </span>
+              </div>
               <p>
                 {complete
                   ? player.submission?.correct

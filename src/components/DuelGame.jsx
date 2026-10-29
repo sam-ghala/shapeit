@@ -70,10 +70,9 @@ export function DuelGame({
     const seq = ++sequence.current;
     try {
       const data = await api(path, token, body);
-      if (seq === sequence.current) {
-        setRoom(data.room);
-        setError("");
-      }
+      if (seq !== sequence.current) return null;
+      setRoom(data.room);
+      setError("");
       return data;
     } catch (e) {
       if (seq === sequence.current) setError(e.message);
@@ -147,11 +146,21 @@ export function DuelGame({
     [credentials],
   );
   const reset = () => {
+    sequence.current++;
     setCredentials(null);
     setRoom(null);
     setError("");
     writeJSON("shapeit:room", null);
     window.history.replaceState(null, "", "/");
+  };
+  const leave = () => {
+    const current = credentials;
+    reset();
+    onHome();
+    if (current)
+      void api(`/api/rooms/${current.code}/action`, current.token, {
+        type: "leave",
+      }).catch(() => {});
   };
   const link = room ? `${window.location.origin}/?room=${room.code}` : "";
   return (
@@ -160,6 +169,11 @@ export function DuelGame({
         <MenuButton onClick={onHome} />
         <h1>1 vs 1</h1>
         <div className="header-actions">
+          {(credentials || room || busy) && (
+            <button className="leave-room" onClick={leave}>
+              Leave room
+            </button>
+          )}
           <SoundToggle compact />
           {room && (
             <span className="badge">
@@ -340,7 +354,18 @@ export function DuelGame({
           </section>
         </div>
       )}
-      {room && room.phase !== "lobby" && (
+      {room?.phase === "closed" && (
+        <section className="card room-closed">
+          <h2>Room closed</h2>
+          <p>
+            {room.players[room.closedBy]?.name || "A player"} left the room.
+          </p>
+          <button className="primary" onClick={reset}>
+            New room
+          </button>
+        </section>
+      )}
+      {room && !["lobby", "closed"].includes(room.phase) && (
         <DuelBoard
           key={room.id}
           room={room}

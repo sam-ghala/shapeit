@@ -201,6 +201,13 @@ export function applyAction(room, index, action, now = Date.now()) {
   if (!p) throw new Error("Room access denied.");
   if (action.roundId && action.roundId !== room.id)
     throw new Error("This round has ended. Refresh the room.");
+  if (action.type === "leave") {
+    room.phase = "closed";
+    room.closedBy = index;
+    room.deadline = null;
+    return room;
+  }
+  if (room.phase === "closed") throw new Error("This room is closed.");
   const race = ["race", "random"].includes(room.settings.mode);
   switch (action.type) {
     case "rematch": {
@@ -361,6 +368,7 @@ export function roomView(room, index, now = Date.now()) {
     id: room.id,
     size: room.size,
     phase: room.phase,
+    closedBy: room.closedBy ?? null,
     settings: room.settings,
     you: index,
     turn: room.turn,

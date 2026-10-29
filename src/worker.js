@@ -199,14 +199,39 @@ export class GameService {
       this.event(body, now);
       return json({ ok: true });
     }
-    if (url.pathname === "/api/admin/events" && request.method === "GET")
+    if (url.pathname === "/api/admin/events" && request.method === "GET") {
+      const player = url.searchParams.get("player");
       return json({
+        players: [
+          ...this.sql.exec(`
+            WITH activity AS (
+              SELECT data,
+                json_extract(data, '$.profileId') AS profileId,
+                json_extract(data, '$.occurredAt') AS playedAt,
+                row_number() OVER (
+                  PARTITION BY json_extract(data, '$.profileId')
+                  ORDER BY json_extract(data, '$.occurredAt') DESC, at DESC, id DESC
+                ) AS position
+              FROM events
+            )
+            SELECT profileId,
+              MAX(CASE WHEN position = 1 THEN json_extract(data, '$.name') END) AS name,
+              MAX(playedAt) AS lastPlayed,
+              COUNT(DISTINCT COALESCE(NULLIF(json_extract(data, '$.sessionId'), ''), json_extract(data, '$.id'))) AS games,
+              SUM(CASE WHEN json_extract(data, '$.kind') = 'finish' THEN 1 ELSE 0 END) AS finishes
+            FROM activity
+            GROUP BY profileId
+            ORDER BY lastPlayed DESC, profileId
+          `),
+        ],
         events: [
           ...this.sql.exec(
-            "SELECT data FROM events ORDER BY at DESC LIMIT 500",
+            `SELECT data FROM events ${player ? "WHERE json_extract(data, '$.profileId') = ?" : ""} ORDER BY at DESC LIMIT 500`,
+            ...(player ? [player] : []),
           ),
         ].map((row) => JSON.parse(row.data)),
       });
+    }
     if (url.pathname === "/api/rooms" && request.method === "POST") {
       let code;
       for (let i = 0; i < 100; i++) {

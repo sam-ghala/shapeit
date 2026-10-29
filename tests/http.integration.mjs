@@ -115,6 +115,20 @@ assert.equal(
   event.at,
 );
 assert.equal(JSON.stringify(activity).includes("MUST_NOT_BE_STORED"), false);
+const hostSummary = activity.players.find((p) => p.profileId === p1.id);
+assert.equal(hostSummary.name, p1.name);
+assert.equal(hostSummary.games, 2);
+assert.equal(hostSummary.finishes, 1);
+const filteredActivity = await request(`/api/admin/events?player=${p1.id}`, {
+  token: adminKey,
+});
+assert.ok(filteredActivity.events.length > 0);
+assert.ok(filteredActivity.events.every((e) => e.profileId === p1.id));
+assert.ok(filteredActivity.players.some((p) => p.profileId === p2.id));
+const emptyActivity = await request("/api/admin/events?player=unknown-player", {
+  token: adminKey,
+});
+assert.deepEqual(emptyActivity.events, []);
 assert.equal(
   activity.events.filter((e) => e.sessionId === finished.id).length,
   4,
@@ -326,6 +340,20 @@ assert.deepEqual(
   timeoutDone.players[lastTimeout].submission.drawing,
   finalDrawing,
 );
+await request(`/api/rooms/${timeoutCode}/action`, {
+  token: timeoutTokens[0],
+  body: { type: "leave" },
+});
+const closed = (
+  await request(`/api/rooms/${timeoutCode}`, { token: timeoutTokens[1] })
+).room;
+assert.equal(closed.phase, "closed");
+assert.equal(closed.closedBy, 0);
+await request(`/api/rooms/${timeoutCode}/action`, {
+  token: timeoutTokens[1],
+  body: { type: "rematch" },
+  status: 400,
+});
 const manifest = await fetch(base + "/manifest.webmanifest").then((r) =>
   r.json(),
 );

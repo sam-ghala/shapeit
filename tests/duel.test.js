@@ -487,3 +487,24 @@ test("random race skips placement, shares a legal secret board and generates a f
     assert.equal(roomView(r, 0).players[0].placed, undefined);
   }
 });
+
+test("either player can close a room in every phase without awarding an unplayed win", () => {
+  for (const phase of ["lobby", "setup", "playing", "final", "finished"]) {
+    const r = playing();
+    r.phase = phase;
+    r.deadline = phase === "final" ? 60000 : null;
+    const wins = [...r.wins];
+    applyAction(r, 1, { type: "leave" }, 5000);
+    assert.equal(r.phase, "closed");
+    assert.equal(r.deadline, null);
+    assert.equal(roomView(r, 0).closedBy, 1);
+    assert.deepEqual(r.wins, wins);
+    assert.throws(() => applyAction(r, 0, { type: "rematch" }, 5001), /closed/);
+    assert.throws(
+      () => applyAction(r, 0, { type: "laser", side: "top", idx: 0 }, 5001),
+      /closed/,
+    );
+    advanceRoom(r, 100000);
+    assert.equal(r.phase, "closed");
+  }
+});
