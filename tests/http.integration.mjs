@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { solutionDrawing, generatePuzzle } from "../src/game/engine.js";
+import {
+  solutionDrawing,
+  generatePuzzle,
+  emptyBoard,
+  calcScore,
+} from "../src/game/engine.js";
 const base = process.env.TEST_BASE_URL || "http://127.0.0.1:8787";
 const adminKey = process.env.TEST_ADMIN_KEY || "local-test-only";
 let calls = 0;
@@ -129,6 +134,87 @@ assert.equal(rematched.room.players[0].placed, undefined);
 const reconnected = await request(`/api/rooms/${code}`, { token: tokens[0] });
 assert.equal(reconnected.room.id, rematched.room.id);
 assert.equal(reconnected.room.queries.length, 0);
+// Exercise the simultaneous mode through the real Worker and durable storage.
+const raceCreated = await request("/api/rooms", {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Race host" },
+    mobile: true,
+  },
+  status: 201,
+});
+const raceCode = raceCreated.room.code;
+const raceJoined = await request(`/api/rooms/${raceCode}/join`, {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Race guest" },
+    mobile: false,
+  },
+});
+const raceTokens = [raceCreated.token, raceJoined.token];
+const raceAction = (i, body, status = 200) =>
+  request(`/api/rooms/${raceCode}/action`, {
+    token: raceTokens[i],
+    body,
+    status,
+  });
+const raceRead = (i) =>
+  request(`/api/rooms/${raceCode}`, { token: raceTokens[i] });
+await raceAction(0, {
+  type: "settings",
+  settings: { mode: "race", extras: { diamond: true } },
+});
+await raceAction(1, { type: "settings", settings: { mode: "turns" } }, 400);
+const setupRace = (await raceAction(0, { type: "start" })).room;
+const raceBoards = setupRace.players.map(
+  (p, i) => generatePuzzle(`http-race:${i}`, p.pieces, 7, 5).placed,
+);
+await raceAction(0, { type: "ready", placed: raceBoards[0] });
+await raceAction(1, { type: "ready", placed: raceBoards[1] });
+await raceAction(0, { type: "laser", side: "top", idx: 0 });
+await raceAction(1, { type: "laser", side: "top", idx: 0 });
+const raceDraft = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
+assert.deepEqual(
+  await raceAction(1, {
+    type: "draft",
+    roundId: setupRace.id,
+    drawing: raceDraft,
+  }),
+  { ok: true },
+);
+assert.equal((await raceRead(0)).room.players[1].draft, undefined);
+const firstRace = (
+  await raceAction(0, {
+    type: "submit",
+    drawing: solutionDrawing(raceBoards[1], 7, 5),
+    score: 1,
+    seconds: 9999,
+  })
+).room;
+assert.equal(firstRace.phase, "playing");
+assert.equal(firstRace.deadline, null);
+assert.deepEqual(firstRace.players[1].draft, raceDraft);
+assert.equal((await raceRead(1)).room.players[0].submission, undefined);
+await raceAction(0, { type: "draft", drawing: raceDraft }, 400);
+const raceDone = (await raceAction(1, { type: "submit", drawing: raceDraft }))
+  .room;
+assert.equal(raceDone.phase, "finished");
+assert.equal(raceDone.winner, 0);
+assert.equal(
+  raceDone.players[0].submission.score,
+  calcScore(raceDone.players[0].submission.seconds, 1, { diamond: true }),
+);
+assert.deepEqual(raceDone.wins, [1, 0]);
+assert.deepEqual((await raceRead(1)).room.wins, [1, 0]);
+await raceAction(0, { type: "rematch" });
+await raceAction(1, { type: "rematch" });
+const nextRace = (await raceRead(0)).room;
+assert.deepEqual(nextRace.wins, [1, 0]);
+assert.equal(nextRace.settings.mode, "race");
+assert.equal(nextRace.phase, "setup");
+await raceAction(
+  1,
+  { type: "draft", roundId: setupRace.id, drawing: raceDraft },
+  400,
+);
 const manifest = await fetch(base + "/manifest.webmanifest").then((r) =>
   r.json(),
 );
@@ -143,5 +229,5 @@ const sw = await fetch(base + "/sw.js").then((r) => r.text());
 assert.match(sw, /shapeit-/);
 assert.match(sw, /\/api\//);
 console.log(
-  `PASS: ${calls} API requests; real Durable Object room, auth, hidden-state protection, final draw, activity deduplication, manifest and install icons.`,
+  `PASS: ${calls} API requests; real Durable Object rooms, both duel modes, private drafts, server scoring, persistent rematch wins, auth, activity deduplication and install assets.`,
 );

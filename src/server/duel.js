@@ -6,6 +6,7 @@ import {
   boardFromPlaced,
   fireLaser,
   checkSolution,
+  scoreBreakdown,
 } from "../game/engine.js";
 export const FINAL_MS = 60_000,
   ROOM_MS = 2 * 60 * 60_000;
@@ -25,7 +26,11 @@ export function cleanProfile(input) {
   return { id: input.id, name };
 }
 export function roomSettings(input = {}) {
-  return { sameShapes: true, extras: normalizeExtras(input.extras) };
+  return {
+    sameShapes: true,
+    mode: input.mode === "race" ? "race" : "turns",
+    extras: normalizeExtras(input.extras),
+  };
 }
 function player(profile, mobile) {
   return {
@@ -36,6 +41,7 @@ function player(profile, mobile) {
     placed: null,
     pieces: [],
     submission: null,
+    draft: null,
   };
 }
 export function createRoom(code, profile, mobile, settings, now = Date.now()) {
@@ -54,6 +60,7 @@ export function createRoom(code, profile, mobile, settings, now = Date.now()) {
     winner: null,
     round: 1,
     rematch: [],
+    wins: [0, 0],
   };
 }
 export function joinRoom(room, profile, mobile) {
@@ -79,29 +86,78 @@ export function advanceRoom(room, now = Date.now()) {
     room.lastActor = null;
     room.deadline = null;
   }
+  const race = room.settings.mode === "race";
   if (
-    room.phase === "final" &&
-    (room.players.every((p) => p.submission !== null) || now >= room.deadline)
+    (race &&
+      room.phase === "playing" &&
+      room.players.every((p) => p.submission !== null)) ||
+    (!race &&
+      room.phase === "final" &&
+      (room.players.every((p) => p.submission !== null) ||
+        now >= room.deadline))
   ) {
     room.phase = "finished";
     room.finishedAt = now;
     const correct = room.players.map((p) => p.submission?.correct === true);
-    room.winner =
-      correct[0] && correct[1]
-        ? "draw"
-        : correct[0]
-          ? 0
-          : correct[1]
-            ? 1
-            : "none";
+    if (correct[0] && correct[1]) {
+      const scores = room.players.map((p) => p.submission.score);
+      room.winner =
+        !race || scores[0] === scores[1]
+          ? "draw"
+          : scores[0] > scores[1]
+            ? 0
+            : 1;
+    } else room.winner = correct[0] ? 0 : correct[1] ? 1 : "none";
+    room.wins ||= [0, 0];
+    if (typeof room.winner === "number") room.wins[room.winner]++;
     room.deadline = null;
   }
 }
+
+function validateDrawing(drawing, cols, rows) {
+  const colors = ["red", "blue", "yellow", "white", "transparent", "black"];
+  if (
+    !drawing ||
+    !Array.isArray(drawing.guess) ||
+    drawing.guess.length !== rows ||
+    drawing.guess.some(
+      (row) =>
+        !Array.isArray(row) ||
+        row.length !== cols ||
+        row.some(
+          (c) =>
+            c !== null &&
+            (!c ||
+              ![...colors, "x"].includes(c.color) ||
+              !["/", "\\", "x"].includes(c.type) ||
+              (c.color === "x") !== (c.type === "x")),
+        ),
+    )
+  )
+    throw new Error("Invalid drawing.");
+  if (
+    !drawing.edges ||
+    typeof drawing.edges !== "object" ||
+    Array.isArray(drawing.edges) ||
+    Object.keys(drawing.edges).length > 200 ||
+    Object.entries(drawing.edges).some(([key, color]) => {
+      if (!/^[hv]-\d+-\d+$/.test(key) || !colors.includes(color)) return true;
+      const [kind, r, c] = key.split("-");
+      return kind === "h" ? +r > rows || +c >= cols : +r >= rows || +c > cols;
+    })
+  )
+    throw new Error("Invalid drawing edges.");
+  return structuredClone({ guess: drawing.guess, edges: drawing.edges });
+}
+
 export function applyAction(room, index, action, now = Date.now()) {
   advanceRoom(room, now);
   const p = room.players[index],
     { cols, rows } = SIZES[room.size];
   if (!p) throw new Error("Room access denied.");
+  if (action.roundId && action.roundId !== room.id)
+    throw new Error("This round has ended. Refresh the room.");
+  const race = room.settings.mode === "race";
   switch (action.type) {
     case "rematch": {
       if (room.phase !== "finished")
@@ -116,6 +172,7 @@ export function applyAction(room, index, action, now = Date.now()) {
         room.players.forEach((p) => {
           p.ready = false;
           p.submission = null;
+          p.draft = null;
         });
         room.queries = [];
         room.winner = null;
@@ -166,7 +223,11 @@ export function applyAction(room, index, action, now = Date.now()) {
       if (action.type === "ready") p.ready = true;
       break;
     case "laser": {
-      if (room.phase !== "playing" || room.turn !== index)
+      if (
+        room.phase !== "playing" ||
+        p.submission !== null ||
+        (!race && room.turn !== index)
+      )
         throw new Error("Wait for your turn.");
       const opponent = room.players[1 - index];
       const result = fireLaser(
@@ -193,7 +254,13 @@ export function applyAction(room, index, action, now = Date.now()) {
         absorbed: result.absorbed,
       });
       room.lastActor = index;
-      room.turn = 1 - index;
+      if (!race) room.turn = 1 - index;
+      break;
+    }
+    case "draft": {
+      if (!["playing", "final"].includes(room.phase) || p.submission !== null)
+        throw new Error("Your drawing is locked.");
+      p.draft = validateDrawing(action.drawing, cols, rows);
       break;
     }
     case "submit":
@@ -203,6 +270,7 @@ export function applyAction(room, index, action, now = Date.now()) {
       if (room.phase !== "playing" && room.phase !== "final")
         throw new Error("You cannot submit now.");
       if (
+        !race &&
         room.phase === "playing" &&
         room.turn !== index &&
         room.lastActor !== index
@@ -210,68 +278,34 @@ export function applyAction(room, index, action, now = Date.now()) {
         throw new Error("Wait for your turn.");
       if (action.type === "pass" && room.phase !== "final")
         throw new Error("Only the final response can be skipped.");
-      const drawing = action.type === "pass" ? null : action.drawing;
-      if (
-        drawing &&
-        (!Array.isArray(drawing.guess) ||
-          drawing.guess.length !== rows ||
-          drawing.guess.some(
-            (row) =>
-              !Array.isArray(row) ||
-              row.length !== cols ||
-              row.some(
-                (c) =>
-                  c !== null &&
-                  (!c ||
-                    ![
-                      "red",
-                      "blue",
-                      "yellow",
-                      "white",
-                      "transparent",
-                      "black",
-                      "x",
-                    ].includes(c.color) ||
-                    !["/", "\\", "x"].includes(c.type)),
-              ),
-          ))
-      )
-        throw new Error("Invalid drawing.");
-      if (
-        drawing &&
-        (!drawing.edges ||
-          typeof drawing.edges !== "object" ||
-          Object.keys(drawing.edges).length > 200 ||
-          Object.entries(drawing.edges).some(
-            ([k, v]) =>
-              !/^[hv]-\d+-\d+$/.test(k) ||
-              ![
-                "red",
-                "blue",
-                "yellow",
-                "white",
-                "transparent",
-                "black",
-              ].includes(v),
-          ))
-      )
-        throw new Error("Invalid drawing edges.");
-      if (action.type === "submit" && !drawing)
-        throw new Error("Submit a drawing.");
+      const drawing =
+        action.type === "pass"
+          ? null
+          : validateDrawing(action.drawing, cols, rows);
+      const correct = drawing
+        ? checkSolution(
+            drawing.guess,
+            drawing.edges,
+            room.players[1 - index].placed,
+            cols,
+            rows,
+          )
+        : false;
+      const seconds = Math.max(0, Math.floor((now - room.startedAt) / 1000));
+      const queries = room.queries.filter((q) => q.player === index).length;
+      const points = correct
+        ? scoreBreakdown(seconds, queries, room.settings.extras)
+        : { total: 0, bonus: 0 };
       p.submission = {
         drawing,
-        correct: drawing
-          ? checkSolution(
-              drawing.guess,
-              drawing.edges,
-              room.players[1 - index].placed,
-              cols,
-              rows,
-            )
-          : false,
+        correct,
+        seconds,
+        queries,
+        score: points.total,
+        bonus: points.bonus,
         at: now,
       };
-      if (room.phase === "playing") {
+      if (!race && room.phase === "playing") {
         room.phase = "final";
         room.deadline = now + FINAL_MS;
         room.firstSubmitter = index;
@@ -300,6 +334,8 @@ export function roomView(room, index, now = Date.now()) {
     expiresAt: room.expiresAt,
     winner: room.winner,
     round: room.round || 1,
+    wins: room.wins || [0, 0],
+    startedAt: room.startedAt ?? null,
     rematch: room.rematch || [],
     queries: room.queries,
     players: room.players.map((p, i) => ({
@@ -310,6 +346,11 @@ export function roomView(room, index, now = Date.now()) {
       submitted: p.submission !== null,
       ...(i === index || done ? { placed: p.placed } : {}),
       ...(done ? { submission: p.submission } : {}),
+      ...(i === index && p.submission ? { submittedAt: p.submission.at } : {}),
+      // Only a player whose own attempt is irreversibly locked may spectate.
+      ...(!done && i !== index && room.players[index].submission !== null
+        ? { draft: p.submission?.drawing || p.draft || null }
+        : {}),
     })),
   };
 }

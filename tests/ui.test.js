@@ -590,3 +590,181 @@ test("solo results use only the personal best from the same mode and size", () =
     act(() => view.unmount());
   }
 });
+
+const DuelBoard = await component("src/components/DuelGame.jsx", "DuelBoard");
+const duel = await import("../src/server/duel.js");
+function duelFixture(mode = "turns") {
+  const room = duel.createRoom(
+    "2468",
+    { id: "host-test", name: "Robin" },
+    true,
+    { mode },
+    1000,
+  );
+  duel.joinRoom(room, { id: "guest-test", name: "Sam" }, false);
+  duel.applyAction(room, 0, { type: "start" }, 2000);
+  for (let i = 0; i < 2; i++)
+    duel.applyAction(
+      room,
+      i,
+      {
+        type: "ready",
+        placed: generatePuzzle(`ui-duel:${i}`, room.players[i].pieces, 7, 5)
+          .placed,
+      },
+      3000,
+    );
+  room.turn = 0;
+  return room;
+}
+function duelProps(room, you = 0) {
+  return {
+    room: duel.roomView(room, you, 4000),
+    action: async () => null,
+    busy: false,
+    effects: true,
+    onNewRoom() {},
+  };
+}
+function duelBoard(rendered) {
+  return rendered.root.findAll(
+    (n) => typeof n.type === "function" && n.type.name === "GameBoard",
+  )[0];
+}
+test("duel splits player logs, clearly signals turns and shows opponent shots on your own board", () => {
+  entries.clear();
+  const room = duelFixture();
+  duel.applyAction(room, 0, { type: "laser", side: "top", idx: 0 }, 4000);
+  duel.applyAction(room, 1, { type: "laser", side: "left", idx: 0 }, 4100);
+  const rendered = mount(DuelBoard, duelProps(room));
+  const logs = rendered.root.findAll(
+    (n) => typeof n.type === "function" && n.type.name === "QueryLog",
+  );
+  assert.deepEqual(
+    logs.map((n) => n.props.title),
+    ["You", "Sam"],
+  );
+  assert.deepEqual(
+    logs.map((n) => n.props.history.length),
+    [1, 1],
+  );
+  assert.ok(text(rendered.root).includes("Your turn"));
+  assert.equal(duelBoard(rendered).props.revealed, null);
+  act(() => logs[1].props.onSelect(0));
+  assert.deepEqual(duelBoard(rendered).props.revealed, room.players[0].placed);
+  assert.equal(duelBoard(rendered).props.activeLaser.side, "left");
+  assert.equal(duelBoard(rendered).props.activeLaser.idx, 0);
+  assert.equal(duelBoard(rendered).props.locked, true);
+  act(() => logs[0].props.onSelect(0));
+  assert.equal(duelBoard(rendered).props.revealed, null);
+  assert.equal(duelBoard(rendered).props.locked, false);
+  room.turn = 1;
+  act(() => rendered.update(React.createElement(DuelBoard, duelProps(room))));
+  assert.ok(text(rendered.root).includes("Sam's turn"));
+  assert.equal(duelBoard(rendered).props.newLaserLocked, true);
+  act(() => rendered.unmount());
+});
+test("race allows either player to fire and first submitter spectates live drawings without exposing solutions", () => {
+  entries.clear();
+  const room = duelFixture("race");
+  room.turn = 1;
+  const rendered = mount(DuelBoard, duelProps(room));
+  assert.equal(duelBoard(rendered).props.newLaserLocked, false);
+  assert.equal(button(rendered, "Submit solution").props.disabled, false);
+  duel.applyAction(
+    room,
+    0,
+    { type: "submit", drawing: solutionDrawing(room.players[1].placed, 7, 5) },
+    5000,
+  );
+  const draft = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
+  duel.applyAction(room, 1, { type: "draft", drawing: draft }, 6000);
+  act(() => rendered.update(React.createElement(DuelBoard, duelProps(room))));
+  assert.ok(text(rendered.root).includes("Sam is finishing"));
+  assert.deepEqual(duelBoard(rendered).props.revealed, room.players[0].placed);
+  assert.deepEqual(duelBoard(rendered).props.edges, draft.edges);
+  assert.equal(duelBoard(rendered).props.drawingDashed, true);
+  assert.equal(duelBoard(rendered).props.locked, true);
+  assert.equal(button(rendered, "Solution locked").props.disabled, true);
+  act(() => rendered.unmount());
+});
+test("finished duel has board buttons and distinct original, overlay and submitted drawing views", () => {
+  entries.clear();
+  const room = duelFixture("race");
+  const wrong = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
+  duel.applyAction(
+    room,
+    0,
+    { type: "submit", drawing: solutionDrawing(room.players[1].placed, 7, 5) },
+    123000,
+  );
+  duel.applyAction(room, 1, { type: "submit", drawing: wrong }, 124000);
+  const rendered = mount(DuelBoard, duelProps(room));
+  act(() => button(rendered, "See board").props.onClick());
+  assert.equal(rendered.root.findAllByType("select").length, 0);
+  const choices = rendered.root
+    .findByProps({ "aria-label": "Choose board" })
+    .findAllByType("button");
+  act(() => choices[1].props.onClick());
+  assert.equal(choices[1].props["aria-pressed"], true);
+  assert.deepEqual(duelBoard(rendered).props.revealed, room.players[0].placed);
+  assert.deepEqual(duelBoard(rendered).props.edges, wrong.edges);
+  assert.equal(duelBoard(rendered).props.drawingDashed, true);
+  act(() => button(rendered, "Sam's drawing").props.onClick());
+  assert.equal(duelBoard(rendered).props.revealed, null);
+  assert.deepEqual(duelBoard(rendered).props.edges, wrong.edges);
+  act(() => button(rendered, "Solution").props.onClick());
+  assert.deepEqual(duelBoard(rendered).props.revealed, room.players[0].placed);
+  assert.equal(duelBoard(rendered).props.compare, false);
+  assert.equal(duelBoard(rendered).props.newLaserLocked, false);
+  assert.equal(
+    text(rendered.root.findByProps({ "aria-label": "Room score" })),
+    "Robin1 : 0Sam",
+  );
+  act(() => rendered.unmount());
+});
+
+test("duel sync sends changed drawings with the round identity and stops immediately after submit", async () => {
+  entries.clear();
+  const room = duelFixture("race"),
+    sent = [];
+  let syncTick;
+  const originalInterval = globalThis.setInterval;
+  globalThis.setInterval = (fn, ms) => {
+    if (ms === 800) syncTick = fn;
+    return originalInterval(fn, ms);
+  };
+  const syncDrawing = async (roundId, drawing, signal) => {
+    sent.push({ roundId, drawing, signal });
+    return { ok: true };
+  };
+  let rendered;
+  try {
+    rendered = mount(DuelBoard, { ...duelProps(room), syncDrawing });
+  } finally {
+    globalThis.setInterval = originalInterval;
+  }
+  await act(async () => {
+    await syncTick();
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].roundId, room.id);
+  await act(async () => {
+    await syncTick();
+  });
+  assert.equal(sent.length, 1);
+  act(() => duelBoard(rendered).props.onCell(0, 0));
+  await act(async () => {
+    await syncTick();
+  });
+  assert.equal(sent.length, 2);
+  assert.ok(sent[1].drawing.guess[0][0]);
+  duel.applyAction(room, 0, { type: "submit", drawing: sent[1].drawing }, 5000);
+  act(() =>
+    rendered.update(
+      React.createElement(DuelBoard, { ...duelProps(room), syncDrawing }),
+    ),
+  );
+  assert.equal(sent[1].signal.aborted, true);
+  act(() => rendered.unmount());
+});

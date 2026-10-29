@@ -54,6 +54,7 @@ test("personal scores survive reload, deduplicate results and separate modes and
     ...createSession(config),
     status: "won",
     score: 4300,
+    scoreVersion: 2,
     startedAt: 1000,
     finishedAt: 121000,
   };
@@ -141,4 +142,42 @@ test("legacy hinted scores are removed and cannot return through saved-game impo
     entries.get("shapeit:personal-scores").includes("old-hint"),
     false,
   );
+});
+
+test("previous results migrate to the same scoring rules without duplicates or lost history", () => {
+  entries.clear();
+  const game = {
+    ...createSession({ ...config, mode: "training", extras: true }),
+    status: "won",
+    score: 893,
+    startedAt: 1000,
+    finishedAt: 121000,
+    history: Array.from({ length: 15 }, (_, i) => ({
+      side: i < 7 ? "top" : i < 14 ? "bottom" : "left",
+      idx: i % 7,
+    })),
+  };
+  writeJSON("shapeit:personal-scores", [
+    {
+      id: game.id,
+      mode: game.mode,
+      size: game.size,
+      status: "won",
+      score: 893,
+      seconds: 120,
+      queries: 15,
+      extras: true,
+      finishedAt: 121000,
+    },
+  ]);
+  const migrated = readScores()[0];
+  assert.equal(migrated.score, 3630);
+  assert.equal(migrated.scoreVersion, 2);
+  assert.equal(migrated.id, game.id);
+  saveResult(game);
+  assert.equal(readScores().length, 1);
+  writeJSON(sessionKey("training", "compact", config.date), game);
+  const restored = loadSession({ ...config, mode: "training", extras: true });
+  assert.equal(restored.score, migrated.score);
+  assert.equal(restored.scoreVersion, 2);
 });

@@ -1,3 +1,4 @@
+import { calcScore, SCORE_VERSION } from "./engine.js";
 import { readJSON, writeJSON } from "./storage.js";
 import { normalizeExtras } from "./extras.js";
 const KEY = "shapeit:personal-scores";
@@ -17,9 +18,24 @@ export function validScore(s) {
 export function readScores() {
   const saved = readJSON(KEY, []);
   if (!Array.isArray(saved)) return [];
-  const scores = saved.filter((s) => validScore(s) && !s.assisted);
-  // Remove legacy assisted results, without touching unassisted personal bests.
-  if (saved.some((s) => s?.assisted)) writeJSON(KEY, scores);
+  const scores = saved
+    .filter((s) => validScore(s) && !s.assisted)
+    .map((s) =>
+      s.scoreVersion !== SCORE_VERSION &&
+      Number.isFinite(s.seconds) &&
+      Number.isFinite(s.queries)
+        ? {
+            ...s,
+            score:
+              s.status === "won"
+                ? calcScore(s.seconds, s.queries, s.extras)
+                : 0,
+            scoreVersion: SCORE_VERSION,
+          }
+        : s,
+    );
+  // Persist the scoring migration and remove legacy assisted entries.
+  if (JSON.stringify(saved) !== JSON.stringify(scores)) writeJSON(KEY, scores);
   return scores;
 }
 export function saveResult(game) {
@@ -35,7 +51,20 @@ export function saveResult(game) {
     size: game.size,
     date: game.date,
     status: game.status,
-    score: game.score ?? 0,
+    score:
+      game.scoreVersion === SCORE_VERSION
+        ? game.score
+        : game.status === "won"
+          ? calcScore(
+              Math.max(
+                0,
+                Math.floor((game.finishedAt - game.startedAt) / 1000),
+              ),
+              game.history.length,
+              game.extras,
+            )
+          : 0,
+    scoreVersion: SCORE_VERSION,
     seconds: Math.max(0, Math.floor((game.finishedAt - game.startedAt) / 1000)),
     queries: game.history.length,
     finishedAt: game.finishedAt,

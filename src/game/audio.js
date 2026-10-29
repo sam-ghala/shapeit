@@ -70,7 +70,10 @@ export function playSound(kind = "tap") {
         return;
       const now = audio.currentTime;
       if (kind === "laser") tone(audio, 680, now, 0.12, 0.018, 340);
-      else if (kind === "draw") tone(audio, 440, now, 0.035, 0.012, 330);
+      else if (kind === "turn") {
+        tone(audio, 523, now, 0.08, 0.016);
+        tone(audio, 659, now + 0.09, 0.12, 0.016);
+      } else if (kind === "draw") tone(audio, 440, now, 0.035, 0.012, 330);
       else if (kind === "clear") tone(audio, 280, now, 0.09, 0.014, 180);
       else tone(audio, 560, now, 0.045, 0.014);
     })

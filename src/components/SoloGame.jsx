@@ -9,7 +9,7 @@ import { unlockAudio, playSound } from "../game/audio.js";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useGameSession } from "../hooks/useGameSession.js";
 import { nextPencilColor, trainingHint } from "../game/assistance.js";
-import { dailyDate, fireLaser } from "../game/engine.js";
+import { dailyDate, fireLaser, scoreBreakdown } from "../game/engine.js";
 import { GameBoard } from "./GameBoard.jsx";
 import { ColorPicker, PieceList, QueryLog } from "./GameControls.jsx";
 import { HowToPlayModal } from "./HowToPlayModal.jsx";
@@ -328,6 +328,11 @@ export function SoloGame({
           title={game.status === "won" ? "Solved!" : "Not solved"}
           won={game.status === "won"}
           score={game.score ?? 0}
+          bonus={
+            game.status === "won"
+              ? scoreBreakdown(seconds, history.length, game.extras).bonus
+              : 0
+          }
           bestScore={bestScore}
           scoreEligible={!game.hintStep}
           detail={`${time} · ${history.length} lasers`}

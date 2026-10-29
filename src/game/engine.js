@@ -501,8 +501,19 @@ export function calcTimeScore(seconds) {
   return 200 / (Math.max(0, seconds) / 60 + 2);
 }
 export function calcQueryScore(q) {
-  return q <= 5 ? 100 : q <= 10 ? 120 - 4 * q : 80 * Math.exp(-0.3 * (q - 10));
+  return q <= 5 ? 100 : q <= 10 ? 120 - 4 * q : 80 * Math.exp(-0.05 * (q - 10));
 }
-export function calcScore(seconds, queries) {
-  return Math.round(calcTimeScore(seconds) * calcQueryScore(queries));
+export const SCORE_VERSION = 2;
+export function scoreBreakdown(seconds, queries, extras = false) {
+  const enabled = normalizeExtras(extras);
+  const count = Number(enabled.diamond) + Number(enabled.black);
+  const raw = calcTimeScore(seconds) * calcQueryScore(Math.max(0, queries));
+  const base = Math.round(raw);
+  // Each extra adds up to 300 points; the bonus tapers toward both ends.
+  // Even with both extras and the full laser allowance, 9,000 needs <18 seconds.
+  const bonus = Math.round(count * 0.12 * raw * (1 - raw / 10000));
+  return { base, bonus, total: Math.min(10000, base + bonus) };
+}
+export function calcScore(seconds, queries, extras = false) {
+  return scoreBreakdown(seconds, queries, extras).total;
 }

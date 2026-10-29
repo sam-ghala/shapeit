@@ -51,6 +51,7 @@ export function QueryLog({
   onSelect,
   selected,
   players = null,
+  title = "Laser log",
   selectionVersion = 0,
 }) {
   const list = useRef(null);
@@ -73,7 +74,7 @@ export function QueryLog({
   return (
     <div className="query-log">
       <h3>
-        Laser log <span>{history.length}</span>
+        {title} <span>{history.length}</span>
       </h3>
       {history.length === 0 ? (
         <p className="muted">No lasers yet.</p>

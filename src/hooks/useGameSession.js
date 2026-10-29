@@ -7,6 +7,7 @@ import {
   fireLaser,
   checkSolution,
   calcScore,
+  SCORE_VERSION,
   emptyBoard,
 } from "../game/engine.js";
 import {
@@ -143,7 +144,8 @@ export function useGameSession(config, profile) {
         status: won ? "won" : "lost",
         startedAt,
         finishedAt: now,
-        score: won ? calcScore(seconds, g.history.length) : 0,
+        score: won ? calcScore(seconds, g.history.length, g.extras) : 0,
+        scoreVersion: SCORE_VERSION,
       };
     });
   return {

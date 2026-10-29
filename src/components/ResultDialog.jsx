@@ -6,6 +6,7 @@ export function ResultDialog({
   title,
   won,
   score,
+  bonus = 0,
   bestScore = null,
   scoreEligible = true,
   detail,
@@ -116,7 +117,9 @@ export function ResultDialog({
           <strong aria-label={`${score.toLocaleString()} points`}>
             {value.toLocaleString()}
           </strong>
-          <span>points</span>
+          <span>
+            points{bonus > 0 ? ` · +${bonus.toLocaleString()} from extras` : ""}
+          </span>
           <div className="score-track">
             <div
               className="score-meter"

@@ -33,6 +33,7 @@ export function GameBoard({
   highlight = null,
   hintPiece = null,
   compare = false,
+  drawingDashed = false,
   hideNotes = false,
   previewPlacement = null,
   replayVersion = 0,
@@ -152,7 +153,10 @@ export function GameBoard({
           ))}
         </g>
       )}
-      <g opacity={compare ? 0.42 : 1} className="drawing-strokes">
+      <g
+        opacity={compare ? (drawingDashed ? 0.9 : 0.42) : 1}
+        className="drawing-strokes"
+      >
         {(!revealed || compare) &&
           guess.map((row, r) =>
             row.map(
@@ -177,7 +181,9 @@ export function GameBoard({
                     {...diagLine(M + c * Z, M + r * Z, Z, diagOf(cell.type))}
                     stroke={PCOLORS[cell.color]}
                     strokeDasharray={
-                      cell.color === "transparent" ? "5 3" : undefined
+                      drawingDashed || cell.color === "transparent"
+                        ? "5 3"
+                        : undefined
                     }
                     strokeWidth={3}
                     strokeLinecap="round"
@@ -191,13 +197,16 @@ export function GameBoard({
               key={k}
               {...line(k)}
               stroke={PCOLORS[color]}
-              strokeDasharray={color === "transparent" ? "5 3" : undefined}
+              strokeDasharray={
+                drawingDashed || color === "transparent" ? "5 3" : undefined
+              }
               strokeWidth={3}
               strokeLinecap="round"
             />
           ))}
       </g>
       {compare &&
+        !drawingDashed &&
         revealed &&
         pieces
           .map((p) => ({ ...p, absCells: findMatch(guess, edges, p) }))

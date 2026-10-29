@@ -255,3 +255,149 @@ test("room options allow either extra independently for both players", () => {
     }
   }
 });
+
+function raceRoom(extras = false) {
+  const r = createRoom(
+    "2468",
+    profiles[0],
+    true,
+    { mode: "race", extras },
+    1000,
+  );
+  joinRoom(r, profiles[1], false);
+  applyAction(r, 0, { type: "start" }, 2000);
+  for (let i = 0; i < 2; i++)
+    applyAction(
+      r,
+      i,
+      {
+        type: "ready",
+        placed: generatePuzzle(`race:${i}`, r.players[i].pieces, 7, 5).placed,
+      },
+      3000,
+    );
+  return r;
+}
+test("host selects score race; both players act independently and only server time and clues count", async () => {
+  const { calcScore } = await import("../src/game/engine.js");
+  const r = raceRoom(true);
+  assert.equal(roomView(r, 0, 3000).startedAt, 3000);
+  applyAction(r, 1 - r.turn, { type: "laser", side: "top", idx: 0 }, 4000);
+  applyAction(r, r.turn, { type: "laser", side: "top", idx: 0 }, 4001);
+  applyAction(
+    r,
+    0,
+    { type: "submit", drawing: correct(r, 0), score: 10000, seconds: 0 },
+    123000,
+  );
+  assert.equal(r.phase, "playing");
+  assert.equal(r.deadline, null);
+  assert.equal(r.players[0].submission.score, calcScore(120, 1, true));
+  assert.equal(roomView(r, 1).players[0].submission, undefined);
+  assert.equal(roomView(r, 0).players[0].submittedAt, 123000);
+  assert.throws(() =>
+    applyAction(r, 0, { type: "laser", side: "left", idx: 0 }, 124000),
+  );
+  assert.throws(() =>
+    applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 124000),
+  );
+  advanceRoom(r, 300000);
+  assert.equal(r.phase, "playing");
+  applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 303000);
+  assert.equal(r.winner, 0);
+  assert.deepEqual(r.wins, [1, 0]);
+  advanceRoom(r, 400000);
+  assert.deepEqual(r.wins, [1, 0]);
+});
+test("race compares final scores, not submission order; ties and incorrect solutions are explicit", () => {
+  const r = raceRoom();
+  // A legal long clue history penalizes the faster player enough to lose.
+  r.queries = Array.from({ length: 20 }, () => ({ player: 0 }));
+  applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 123000);
+  applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 153000);
+  assert.equal(r.winner, 1);
+  for (const kind of ["draw", "none", 0]) {
+    const room = raceRoom();
+    const wrong = { guess: emptyBoard(7, 5), edges: {} };
+    applyAction(
+      room,
+      0,
+      { type: "submit", drawing: kind === "none" ? wrong : correct(room, 0) },
+      123000,
+    );
+    applyAction(
+      room,
+      1,
+      { type: "submit", drawing: kind === "draw" ? correct(room, 1) : wrong },
+      123000,
+    );
+    assert.equal(room.winner, kind);
+    assert.deepEqual(room.wins, kind === 0 ? [1, 0] : [0, 0]);
+  }
+});
+test("live drawings stay private until the viewer submits and stay locked after submission", () => {
+  for (const r of [playing(), raceRoom()]) {
+    const first = r.turn,
+      other = 1 - first;
+    const draft = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
+    applyAction(r, other, { type: "draft", drawing: draft }, 3500);
+    assert.equal(roomView(r, first).players[other].draft, undefined);
+    assert.equal(roomView(r, other).players[first].draft, undefined);
+    assert.throws(() =>
+      applyAction(
+        r,
+        other,
+        { type: "draft", drawing: { ...draft, edges: { "h-8-0": "red" } } },
+        3600,
+      ),
+    );
+    assert.deepEqual(r.players[other].draft, draft);
+    applyAction(r, first, { type: "submit", drawing: correct(r, first) }, 4000);
+    assert.deepEqual(roomView(r, first).players[other].draft, draft);
+    assert.equal(roomView(r, other).players[first].draft, undefined);
+    assert.equal(roomView(r, first).players[other].placed, undefined);
+    const updated = correct(r, other);
+    applyAction(r, other, { type: "draft", drawing: updated }, 4200);
+    assert.deepEqual(roomView(r, first).players[other].draft, updated);
+    assert.throws(() =>
+      applyAction(r, first, { type: "draft", drawing: draft }, 4300),
+    );
+  }
+});
+test("room wins survive rematch and reconnect; stale round actions cannot alter the new round", () => {
+  const r = raceRoom(),
+    id = r.id;
+  applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 123000);
+  applyAction(
+    r,
+    1,
+    { type: "submit", drawing: { guess: emptyBoard(7, 5), edges: {} } },
+    124000,
+  );
+  applyAction(r, 0, { type: "rematch" }, 125000);
+  applyAction(r, 1, { type: "rematch" }, 125001);
+  assert.deepEqual(roomView(r, 0).wins, [1, 0]);
+  assert.equal(r.settings.mode, "race");
+  assert.ok(r.players.every((p) => p.draft === null && p.submission === null));
+  assert.throws(() =>
+    applyAction(r, 0, { type: "place", roundId: id, placed: [] }, 126000),
+  );
+  for (let i = 0; i < 2; i++)
+    applyAction(
+      r,
+      i,
+      {
+        type: "ready",
+        placed: generatePuzzle(`second:${i}`, r.players[i].pieces, 7, 5).placed,
+      },
+      127000,
+    );
+  applyAction(
+    r,
+    0,
+    { type: "submit", drawing: { guess: emptyBoard(7, 5), edges: {} } },
+    130000,
+  );
+  applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 131000);
+  assert.deepEqual(roomView(r, 1).wins, [1, 1]);
+});

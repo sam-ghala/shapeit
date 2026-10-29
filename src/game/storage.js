@@ -1,4 +1,11 @@
-import { ENGINE_VERSION, SIZES, emptyBoard, dailySeed } from "./engine.js";
+import {
+  ENGINE_VERSION,
+  SCORE_VERSION,
+  calcScore,
+  SIZES,
+  emptyBoard,
+  dailySeed,
+} from "./engine.js";
 
 export function readJSON(key, fallback) {
   try {
@@ -125,7 +132,26 @@ export function loadSession(config) {
     null,
   );
   return validSession(saved, config)
-    ? { ...saved, timed: true }
+    ? {
+        ...saved,
+        timed: true,
+        ...(saved.status !== "playing" && saved.scoreVersion !== SCORE_VERSION
+          ? {
+              score:
+                saved.status === "won"
+                  ? calcScore(
+                      Math.max(
+                        0,
+                        Math.floor((saved.finishedAt - saved.startedAt) / 1000),
+                      ),
+                      saved.history.length,
+                      saved.extras,
+                    )
+                  : 0,
+              scoreVersion: SCORE_VERSION,
+            }
+          : {}),
+      }
     : createSession(config);
 }
 export function queueEvent(event, profile) {

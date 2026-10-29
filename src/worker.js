@@ -155,7 +155,7 @@ export class GameService {
     }
     try {
       const limited = this.storage.transactionSync(() =>
-        this.rateLimit(request, url),
+        this.rateLimit(request, url, body),
       );
       if (limited) return limited;
       return this.storage.transactionSync(() =>
@@ -168,7 +168,7 @@ export class GameService {
       );
     }
   }
-  rateLimit(request, url) {
+  rateLimit(request, url, body) {
     const now = Date.now();
     this.sql.exec("DELETE FROM limits WHERE window < ?", now - 60000);
     const category =
@@ -176,11 +176,15 @@ export class GameService {
         ? "create"
         : url.pathname.endsWith("/join")
           ? "join"
-          : request.method === "GET"
-            ? "read"
-            : "write";
+          : url.pathname.endsWith("/action") && body.type === "draft"
+            ? "draft"
+            : request.method === "GET"
+              ? "read"
+              : "write";
     const key = `${request.headers.get("X-Rate-Key")}:${category}`;
-    const limit = { create: 6, join: 20, read: 180, write: 120 }[category];
+    const limit = { create: 6, join: 20, read: 180, write: 120, draft: 180 }[
+      category
+    ];
     const current = [
       ...this.sql.exec("SELECT count FROM limits WHERE key = ?", key),
     ][0];
@@ -317,7 +321,12 @@ export class GameService {
                   ? "won"
                   : "lost",
             queries: room.queries.filter((q) => q.player === i).length,
-            seconds: Math.floor((now - room.startedAt) / 1000),
+            seconds:
+              p.submission?.seconds ??
+              Math.floor((now - room.startedAt) / 1000),
+            ...(room.settings.mode === "race"
+              ? { score: p.submission?.score ?? 0 }
+              : {}),
           },
           now,
         ),
@@ -328,6 +337,7 @@ export class GameService {
       room.expiresAt,
       room.code,
     );
+    if (body.type === "draft") return json({ ok: true });
     return json({
       room: roomView(room, index, now),
       ...(joined ? { token } : {}),

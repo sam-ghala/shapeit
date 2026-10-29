@@ -5,7 +5,7 @@ import { ExtraOptions } from "./ExtraOptions.jsx";
 import { ResultDialog } from "./ResultDialog.jsx";
 import { unlockAudio, playSound } from "../game/audio.js";
 import { nextPencilColor } from "../game/assistance.js";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   SIZES,
   emptyBoard,
@@ -20,7 +20,7 @@ import { GameBoard } from "./GameBoard.jsx";
 import { PiecePreview } from "./PiecePreview.jsx";
 import { ColorPicker, PieceList, QueryLog } from "./GameControls.jsx";
 
-async function api(path, token, body) {
+async function api(path, token, body, signal) {
   const res = await fetch(path, {
     method: body ? "POST" : "GET",
     headers: {
@@ -29,6 +29,7 @@ async function api(path, token, body) {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
     cache: "no-store",
+    signal,
   });
   const data = await res.json().catch(() => ({
     error: "The online service is unavailable. Please try again.",
@@ -128,7 +129,22 @@ export function DuelGame({
     }
   };
   const action = async (body) =>
-    run(`/api/rooms/${credentials.code}/action`, credentials.token, body);
+    run(`/api/rooms/${credentials.code}/action`, credentials.token, {
+      ...body,
+      roundId: room?.id,
+    });
+  const syncDrawing = useCallback(
+    (roundId, drawing, signal) => {
+      if (!credentials) return Promise.resolve(null);
+      return api(
+        `/api/rooms/${credentials.code}/action`,
+        credentials.token,
+        { type: "draft", roundId, drawing },
+        signal,
+      ).catch(() => null);
+    },
+    [credentials],
+  );
   const reset = () => {
     setCredentials(null);
     setRoom(null);
@@ -262,6 +278,38 @@ export function DuelGame({
           <section className="card">
             <h2>Room settings</h2>
             <fieldset disabled={room.you !== 0 || busy}>
+              <div
+                className="duel-mode-choice"
+                role="group"
+                aria-label="Duel mode"
+              >
+                {[
+                  [
+                    "turns",
+                    "Take turns",
+                    "Alternate lasers. One final attempt each.",
+                  ],
+                  [
+                    "race",
+                    "Score race",
+                    "Play together. Time + lasers decide the score.",
+                  ],
+                ].map(([mode, title, help]) => (
+                  <button
+                    key={mode}
+                    aria-pressed={(room.settings.mode || "turns") === mode}
+                    onClick={() =>
+                      action({
+                        type: "settings",
+                        settings: { ...room.settings, mode },
+                      })
+                    }
+                  >
+                    <strong>{title}</strong>
+                    <small>{help}</small>
+                  </button>
+                ))}
+              </div>
               <ExtraOptions
                 value={room.settings.extras}
                 onChange={(extras) =>
@@ -293,6 +341,7 @@ export function DuelGame({
           key={room.id}
           room={room}
           action={action}
+          syncDrawing={syncDrawing}
           busy={busy}
           effects={effects}
           onNewRoom={reset}
@@ -301,7 +350,14 @@ export function DuelGame({
     </main>
   );
 }
-function DuelBoard({ room, action, busy, effects, onNewRoom }) {
+export function DuelBoard({
+  room,
+  action,
+  syncDrawing,
+  busy,
+  effects,
+  onNewRoom,
+}) {
   const { cols, rows } = SIZES[room.size],
     me = room.players[room.you],
     opponent = room.players[1 - room.you];
@@ -314,7 +370,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
     [view, setView] = useState("drawing"),
     [owner, setOwner] = useState(1 - room.you),
     [resultOpen, setResultOpen] = useState(false),
-    [overlay, setOverlay] = useState(true),
+    [reviewMode, setReviewMode] = useState("overlay"),
     [selectionVersion, setSelectionVersion] = useState(0),
     [shareMessage, setShareMessage] = useState("");
   const drawKey = `shapeit:duel-drawing:${room.id}:${room.you}`;
@@ -346,6 +402,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
         Math.max(0, Math.ceil((room.deadline - clock - offset.current) / 1000)),
       )
     : null;
+  const race = room.settings.mode === "race";
   const done = room.phase === "finished",
     setup = room.phase === "setup";
   useEffect(() => {
@@ -396,6 +453,44 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
     setOrientations((value) => ({ ...value, [selectedPiece]: next }));
   };
   const canDraw = !done && !setup && !me.submitted;
+  const latestDrawing = useRef(drawing);
+  latestDrawing.current = drawing;
+  useEffect(() => {
+    if (!canDraw || !syncDrawing) return;
+    const controller = new AbortController();
+    let sent = "",
+      sending = false;
+    const send = async () => {
+      const current = latestDrawing.current,
+        signature = JSON.stringify(current);
+      if (sending || signature === sent) return;
+      sending = true;
+      const result = await syncDrawing(room.id, current, controller.signal);
+      if (result) sent = signature;
+      sending = false;
+    };
+    const timer = setInterval(send, 800);
+    return () => {
+      clearInterval(timer);
+      controller.abort();
+    };
+  }, [canDraw, room.id, syncDrawing]);
+  useEffect(() => {
+    if (me.submitted && !done) {
+      setView("mine");
+      setReplay(null);
+      setSelectedQuery(null);
+    }
+  }, [me.submitted, done]);
+  const myTurn =
+    room.phase === "playing" &&
+    !me.submitted &&
+    (race || room.turn === room.you);
+  const lastTurn = useRef(myTurn);
+  useEffect(() => {
+    if (myTurn && !lastTurn.current && !race) playSound("turn");
+    lastTurn.current = myTurn;
+  }, [myTurn, race]);
   const cell = (r, c) => {
     if (!canDraw) return;
     playSound("draw");
@@ -429,22 +524,28 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
     !me.submitted &&
     (room.phase === "final" ||
       (room.phase === "playing" &&
-        (room.turn === room.you || room.lastActor === room.you)));
+        (race || room.turn === room.you || room.lastActor === room.you)));
   const handleLaser = async (side, idx) => {
-    const shooter = done ? 1 - owner : room.you;
+    const ownBoard = !done && view === "mine";
+    const shooter = done ? 1 - owner : ownBoard ? 1 - room.you : room.you;
     const existing = room.queries.findIndex(
       (q) =>
         q.player === shooter &&
         ((q.side === side && q.idx === idx) ||
           (q.exitSide === side && q.exitIdx === idx)),
     );
-    if (done) {
+    if (done || ownBoard) {
+      if (ownBoard && existing < 0) return;
       playSound("laser");
       setSelectedQuery(existing >= 0 ? existing : null);
       setSelectionVersion((v) => v + 1);
       setReplay({
         ...fireLaser(
-          boardFromPlaced(room.players[owner].placed, cols, rows),
+          boardFromPlaced(
+            room.players[done ? owner : room.you].placed,
+            cols,
+            rows,
+          ),
           side,
           idx,
         ),
@@ -459,10 +560,10 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
       setSelectionVersion((v) => v + 1);
       return;
     }
-    if (done || room.phase !== "playing" || room.turn !== room.you) return;
+    if (!myTurn) return;
     unlockAudio();
     const data = await action({ type: "laser", side, idx });
-    const shot = data?.room?.queries.at(-1);
+    const shot = data?.room?.queries.findLast((q) => q.player === room.you);
     if (shot?.player === room.you) {
       playSound("laser");
       setColor(
@@ -474,7 +575,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
           color,
         ),
       );
-      setSelectedQuery(data.room.queries.length - 1);
+      setSelectedQuery(data.room.queries.indexOf(shot));
       setSelectionVersion((v) => v + 1);
     }
   };
@@ -503,16 +604,73 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
       if (e.name !== "AbortError") setShareMessage("Sharing is unavailable.");
     }
   };
+  const boardOwner = done ? owner : view === "mine" ? room.you : 1 - room.you;
+  const author = 1 - boardOwner;
   const reviewedDrawing = done
-    ? room.players[1 - owner].submission?.drawing
-    : null;
+    ? room.players[author].submission?.drawing
+    : view === "mine"
+      ? opponent.draft
+      : drawing;
+  const ownBoard = boardOwner === room.you;
+  const changeBoard = (index) => {
+    setOwner(index);
+    setView(index === room.you ? "mine" : "drawing");
+    setReplay(null);
+    setSelectedQuery(null);
+  };
+  const selectQuery = (index) => {
+    const q = room.queries[index],
+      target = 1 - q.player;
+    changeBoard(target);
+    setSelectedQuery(index);
+    setSelectionVersion((v) => v + 1);
+    if (done || target === room.you)
+      setReplay({
+        ...fireLaser(
+          boardFromPlaced(room.players[target].placed, cols, rows),
+          q.side,
+          q.idx,
+        ),
+        side: q.side,
+        idx: q.idx,
+      });
+    playSound("laser");
+  };
+  const ownSeconds = room.startedAt
+    ? Math.max(
+        0,
+        Math.floor(
+          ((me.submittedAt || clock + offset.current) - room.startedAt) / 1000,
+        ),
+      )
+    : 0;
+  const status = setup
+    ? "Arrange your board"
+    : done
+      ? resultTitle
+      : me.submitted
+        ? `${opponent.name} is finishing…`
+        : room.phase === "final"
+          ? "Final attempt · no more lasers"
+          : race
+            ? "Score race · Go!"
+            : myTurn
+              ? "Your turn"
+              : `${opponent.name}'s turn`;
   return (
     <>
       {done && resultOpen && (
         <ResultDialog
           title={resultTitle}
-          won={me.submission?.correct === true}
-          detail={`${room.queries.filter((q) => q.player === room.you).length} lasers · ${me.name} vs ${opponent.name}`}
+          won={room.winner === room.you || room.winner === "draw"}
+          score={race ? (me.submission?.score ?? 0) : undefined}
+          scoreEligible={false}
+          bonus={race ? (me.submission?.bonus ?? 0) : 0}
+          detail={
+            race
+              ? `You ${me.submission?.score ?? 0} · ${opponent.name} ${opponent.submission?.score ?? 0}`
+              : `${me.name} vs ${opponent.name}`
+          }
           onClose={() => setResultOpen(false)}
           onNext={() => action({ type: "rematch" })}
           nextLabel={rematchLabel}
@@ -521,27 +679,31 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
           message={shareMessage}
         />
       )}
-      <div className="session-bar">
+      <div className="duel-scoreline" aria-label="Room score">
+        <span>{me.name}</span>
         <strong>
-          {setup
-            ? "Arrange your hidden board"
-            : done
-              ? room.winner === "draw"
-                ? "Both solved it — a draw!"
-                : room.winner === "none"
-                  ? "Neither board was solved"
-                  : `${room.players[room.winner].name} wins!`
-              : room.phase === "final"
-                ? me.submitted
-                  ? "Waiting for final response"
-                  : "Final attempt"
-                : room.turn === room.you
-                  ? "Your turn"
-                  : `${opponent.name}'s turn`}
+          {room.wins?.[room.you] ?? 0} : {room.wins?.[1 - room.you] ?? 0}
+        </strong>
+        <span>{opponent.name}</span>
+      </div>
+      <div
+        className={`session-bar turn-banner ${myTurn || (room.phase === "final" && !me.submitted) ? "your-turn" : "their-turn"}`}
+        role="status"
+        key={status}
+      >
+        <strong>
+          {myTurn && !race ? "▶ " : ""}
+          {status}
         </strong>
         {countdown !== null && (
           <span className="countdown" role="timer">
             {countdown}s
+          </span>
+        )}
+        {race && !setup && !done && (
+          <span className="duel-time">
+            {Math.floor(ownSeconds / 60)}:
+            {String(ownSeconds % 60).padStart(2, "0")}
           </span>
         )}
       </div>
@@ -652,122 +814,123 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
         </>
       ) : (
         <>
-          {done ? (
-            <div className="review-tabs">
-              <label>
-                Review board
-                <select
-                  value={owner}
-                  onChange={(e) => {
-                    setOwner(Number(e.target.value));
-                    setSelectedQuery(null);
-                    setReplay(null);
-                  }}
-                >
-                  {room.players.map((p, i) => (
-                    <option key={i} value={i}>
-                      {p.name}'s board
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={overlay}
-                  onChange={(e) => setOverlay(e.target.checked)}
-                />
-                Overlay drawing
-              </label>
-              <button onClick={() => setResultOpen(true)}>Result</button>
-              <button
-                className="primary"
-                disabled={busy || room.rematch?.includes(room.you)}
-                onClick={() => action({ type: "rematch" })}
-              >
-                {room.rematch?.includes(room.you)
-                  ? "Waiting for rematch…"
-                  : room.rematch?.length
-                    ? "Accept rematch"
-                    : "Rematch"}
-              </button>
-              <button onClick={onNewRoom}>New room</button>
-            </div>
-          ) : (
-            <div className="review-tabs">
-              <button
-                aria-pressed={view === "drawing"}
-                onClick={() => setView("drawing")}
-              >
-                Find {opponent.name}'s board
-              </button>
-              <button
-                aria-pressed={view === "mine"}
-                onClick={() => setView("mine")}
-              >
-                My hidden board
-              </button>
-            </div>
-          )}
-          <div className="play-layout">
+          <div className="board-switch" role="group" aria-label="Choose board">
+            <button
+              aria-pressed={!ownBoard}
+              onClick={() => changeBoard(1 - room.you)}
+            >
+              <strong>{opponent.name}'s board</strong>
+              <small>{done ? "Your solution" : "Your drawing"}</small>
+            </button>
+            <button
+              aria-pressed={ownBoard}
+              onClick={() => changeBoard(room.you)}
+            >
+              <strong>Your board</strong>
+              <small>
+                {me.submitted || done
+                  ? `${opponent.name}'s drawing`
+                  : `${opponent.name}'s lasers`}
+              </small>
+            </button>
+          </div>
+          <div className="play-layout duel-play-layout">
             <section className="board-panel">
               <GameBoard
                 cols={cols}
                 rows={rows}
-                guess={
-                  done
-                    ? reviewedDrawing?.guess || emptyBoard(cols, rows)
-                    : drawing.guess
-                }
-                edges={done ? reviewedDrawing?.edges || {} : drawing.edges}
-                pieces={done ? room.players[owner].pieces : opponent.pieces}
+                guess={reviewedDrawing?.guess || emptyBoard(cols, rows)}
+                edges={reviewedDrawing?.edges || {}}
+                pieces={room.players[boardOwner].pieces}
                 revealed={
                   done
-                    ? room.players[owner].placed
-                    : view === "mine"
+                    ? reviewMode === "drawing"
+                      ? null
+                      : room.players[boardOwner].placed
+                    : ownBoard
                       ? me.placed
                       : null
                 }
-                compare={done && overlay}
-                hideNotes={done}
-                locked={!canDraw || view !== "drawing"}
+                compare={
+                  done ? reviewMode === "overlay" : ownBoard && me.submitted
+                }
+                drawingDashed={
+                  done ? reviewMode === "overlay" : ownBoard && me.submitted
+                }
+                hideNotes={done || ownBoard}
+                locked={!canDraw || ownBoard}
                 onCell={cell}
                 onEdge={edge}
-                onLaser={view !== "mine" ? handleLaser : undefined}
+                onLaser={handleLaser}
                 laserLocked={busy}
-                newLaserLocked={
-                  !done && (room.phase !== "playing" || room.turn !== room.you)
-                }
+                newLaserLocked={!done && (ownBoard || !myTurn)}
                 selectedColor={color}
-                activeLaser={done ? replay : null}
+                activeLaser={done || ownBoard ? replay : null}
                 replayVersion={selectionVersion}
                 animate={effects}
-                queries={room.queries.filter(
-                  (q) => q.player === (done ? 1 - owner : room.you),
-                )}
+                queries={room.queries.filter((q) => q.player === author)}
                 highlight={
-                  done
-                    ? replay
-                    : selectedQuery !== null
-                      ? room.queries[selectedQuery]
-                      : null
+                  replay ||
+                  (selectedQuery !== null &&
+                  room.queries[selectedQuery]?.player === author
+                    ? room.queries[selectedQuery]
+                    : null)
                 }
               />
-              {done && !reviewedDrawing && view === "drawing" && (
-                <p className="notice">
-                  No final drawing was submitted for this board.
-                </p>
+              {done && !reviewedDrawing && (
+                <p className="notice">No drawing submitted.</p>
               )}
             </section>
-            <div className="game-sidebar">
+            <div className="game-sidebar duel-sidebar">
               <aside className="tools-panel">
+                {done && (
+                  <>
+                    <div
+                      className="comparison-tabs"
+                      role="group"
+                      aria-label="Compare drawings"
+                    >
+                      {[
+                        ["solution", "Solution"],
+                        ["overlay", "Overlay"],
+                        [
+                          "drawing",
+                          ownBoard
+                            ? `${opponent.name}'s drawing`
+                            : "Your drawing",
+                        ],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          aria-pressed={reviewMode === value}
+                          onClick={() => setReviewMode(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="comparison-legend">
+                      {reviewMode === "overlay"
+                        ? `Filled: ${ownBoard ? "your" : opponent.name + "’s"} board · Dashed: ${ownBoard ? opponent.name + "’s" : "your"} drawing`
+                        : reviewMode === "solution"
+                          ? `${ownBoard ? "Your" : opponent.name + "’s"} original board`
+                          : `${ownBoard ? opponent.name + "’s" : "Your"} submitted drawing`}
+                    </p>
+                  </>
+                )}
+                {!done && ownBoard && me.submitted && (
+                  <p className="comparison-legend">
+                    Filled: your board · Dashed: {opponent.name}'s live drawing
+                  </p>
+                )}
+
                 <PieceList
-                  pieces={done ? room.players[owner].pieces : opponent.pieces}
-                  guess={done ? reviewedDrawing?.guess : drawing.guess}
-                  edges={done ? reviewedDrawing?.edges : drawing.edges}
-                  onColor={canDraw ? setColor : undefined}
+                  pieces={room.players[boardOwner].pieces}
+                  guess={reviewedDrawing?.guess}
+                  edges={reviewedDrawing?.edges}
+                  onColor={canDraw && !ownBoard ? setColor : undefined}
                 />
-                {canDraw && (
+                {canDraw && !ownBoard && (
                   <ColorPicker
                     pieces={opponent.pieces}
                     value={color}
@@ -796,37 +959,55 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
                   </button>
                 )}
               </aside>
-              <QueryLog
-                history={room.queries}
-                cols={cols}
-                rows={rows}
-                players={room.players}
-                selected={selectedQuery}
-                selectionVersion={selectionVersion}
-                onSelect={(i) => {
-                  setSelectedQuery(i);
-                  setSelectionVersion((v) => v + 1);
-                  if (done) {
-                    const q = room.queries[i];
-                    const target = 1 - q.player;
-                    setOwner(target);
-                    setReplay({
-                      ...fireLaser(
-                        boardFromPlaced(
-                          room.players[target].placed,
-                          cols,
-                          rows,
-                        ),
-                        q.side,
-                        q.idx,
-                      ),
-                      side: q.side,
-                      idx: q.idx,
-                    });
-                    setView("solution");
-                  }
-                }}
-              />
+              <div className="duel-logs">
+                {[room.you, 1 - room.you].map((shooter) => {
+                  const queries = room.queries
+                    .map((q, index) => ({ ...q, index }))
+                    .filter((q) => q.player === shooter);
+                  return (
+                    <QueryLog
+                      key={shooter}
+                      title={shooter === room.you ? "You" : opponent.name}
+                      history={queries}
+                      cols={cols}
+                      rows={rows}
+                      selected={
+                        queries.some((q) => q.index === selectedQuery)
+                          ? queries.findIndex((q) => q.index === selectedQuery)
+                          : null
+                      }
+                      selectionVersion={selectionVersion}
+                      onSelect={(i) => selectQuery(queries[i].index)}
+                    />
+                  );
+                })}
+              </div>
+              {done && (
+                <div className="secondary-tools duel-result-tools">
+                  {race && (
+                    <div className="round-points">
+                      <span>
+                        You <strong>{me.submission?.score ?? 0}</strong>
+                      </span>
+                      <span>
+                        {opponent.name}{" "}
+                        <strong>{opponent.submission?.score ?? 0}</strong>
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    className="primary next-board"
+                    disabled={busy || room.rematch?.includes(room.you)}
+                    onClick={() => action({ type: "rematch" })}
+                  >
+                    {rematchLabel} →
+                  </button>
+                  <div className="button-row">
+                    <button onClick={() => setResultOpen(true)}>Result</button>
+                    <button onClick={onNewRoom}>New room</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>
