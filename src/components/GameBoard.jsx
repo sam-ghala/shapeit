@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { PCOLORS, PFILL } from "../constants/gameConstants.js";
 import {
   computeOutlineEdges,
@@ -34,18 +34,16 @@ export function GameBoard({
   hintPiece = null,
   compare = false,
   hideNotes = false,
+  previewPlacement = null,
+  replayVersion = 0,
 }) {
   const [focus, setFocus] = useState([0, 0]);
   const [hover, setHover] = useState(null);
   const hoverCell = hover ? guess[hover[0]]?.[hover[1]] : null;
-  const previewType =
-    selectedColor === "x"
-      ? null
-      : hoverCell?.color !== selectedColor
-        ? "\\"
-        : hoverCell.type === "\\"
-          ? "/"
-          : null;
+  const pointer = useRef("mouse");
+  const previewType = selectedColor !== "x" && !hoverCell ? "\\" : null;
+  const placement =
+    !locked && hover && previewPlacement ? previewPlacement(...hover) : null;
   const filled = useMemo(
     () =>
       revealed ??
@@ -76,9 +74,23 @@ export function GameBoard({
       className="game-board"
       role="group"
       aria-label={label}
+      onPointerDownCapture={(e) => {
+        pointer.current = e.pointerType;
+        if (e.pointerType !== "mouse") setHover(null);
+      }}
+      onKeyDownCapture={() => {
+        pointer.current = "keyboard";
+      }}
       viewBox={`0 0 ${cols * Z + 2 * M} ${rows * Z + 2 * M}`}
     >
-      <rect x={M} y={M} width={cols * Z} height={rows * Z} fill="white" />
+      <rect
+        x={M}
+        y={M}
+        width={cols * Z}
+        height={rows * Z}
+        className="board-surface"
+        fill="white"
+      />
       {edgeTargets.map((k) => (
         <line key={k} {...line(k)} stroke="#d7dce1" strokeWidth="1" />
       ))}
@@ -140,51 +152,51 @@ export function GameBoard({
           ))}
         </g>
       )}
-      {(!revealed || compare) &&
-        guess.map((row, r) =>
-          row.map(
-            (cell, c) =>
-              cell &&
-              (cell.color === "x" ? (
-                hideNotes ? null : (
-                  <text
+      <g opacity={compare ? 0.42 : 1} className="drawing-strokes">
+        {(!revealed || compare) &&
+          guess.map((row, r) =>
+            row.map(
+              (cell, c) =>
+                cell &&
+                (cell.color === "x" ? (
+                  hideNotes ? null : (
+                    <text
+                      key={`${r},${c}`}
+                      x={M + c * Z + Z / 2}
+                      y={M + r * Z + Z / 2 + 5}
+                      textAnchor="middle"
+                      fill="#8c959e"
+                      fontSize="17"
+                    >
+                      ×
+                    </text>
+                  )
+                ) : (
+                  <line
                     key={`${r},${c}`}
-                    x={M + c * Z + Z / 2}
-                    y={M + r * Z + Z / 2 + 5}
-                    textAnchor="middle"
-                    fill="#8c959e"
-                    fontSize="17"
-                  >
-                    ×
-                  </text>
-                )
-              ) : (
-                <line
-                  key={`${r},${c}`}
-                  {...diagLine(M + c * Z, M + r * Z, Z, diagOf(cell.type))}
-                  stroke={PCOLORS[cell.color]}
-                  strokeDasharray={
-                    cell.color === "transparent" ? "5 3" : undefined
-                  }
-                  strokeWidth={compare ? 5 : 3}
-                  opacity={compare ? 0.4 : 1}
-                  strokeLinecap="round"
-                />
-              )),
-          ),
-        )}
-      {(!revealed || compare) &&
-        Object.entries(edges).map(([k, color]) => (
-          <line
-            key={k}
-            {...line(k)}
-            stroke={PCOLORS[color]}
-            strokeDasharray={color === "transparent" ? "5 3" : undefined}
-            strokeWidth={compare ? 5 : 3}
-            opacity={compare ? 0.4 : 1}
-            strokeLinecap="round"
-          />
-        ))}
+                    {...diagLine(M + c * Z, M + r * Z, Z, diagOf(cell.type))}
+                    stroke={PCOLORS[cell.color]}
+                    strokeDasharray={
+                      cell.color === "transparent" ? "5 3" : undefined
+                    }
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                  />
+                )),
+            ),
+          )}
+        {(!revealed || compare) &&
+          Object.entries(edges).map(([k, color]) => (
+            <line
+              key={k}
+              {...line(k)}
+              stroke={PCOLORS[color]}
+              strokeDasharray={color === "transparent" ? "5 3" : undefined}
+              strokeWidth={3}
+              strokeLinecap="round"
+            />
+          ))}
+      </g>
       {compare &&
         revealed &&
         pieces
@@ -201,7 +213,37 @@ export function GameBoard({
               ))}
             </g>
           ))}
-      {!locked && hover && (
+      {placement && (
+        <g
+          opacity="0.45"
+          pointerEvents="none"
+          aria-label={
+            placement.error ? "Invalid placement preview" : "Placement preview"
+          }
+        >
+          {placement.piece.absCells.map(([r, c, t], i) => (
+            <polygon
+              key={i}
+              points={fillPoints(M + c * Z, M + r * Z, Z, t)}
+              fill={
+                placement.error ? "#e65353" : PCOLORS[placement.piece.color]
+              }
+            />
+          ))}
+          {placement.error && (
+            <text
+              x={M + hover[1] * Z + Z / 2}
+              y={M + hover[0] * Z + Z / 2 + 7}
+              textAnchor="middle"
+              fill="#a51818"
+              fontSize="28"
+            >
+              ×
+            </text>
+          )}
+        </g>
+      )}
+      {!locked && hover && !previewPlacement && (
         <g pointerEvents="none" aria-hidden="true">
           <rect
             x={M + hover[1] * Z + 1}
@@ -222,7 +264,7 @@ export function GameBoard({
       )}
       {activeLaser?.points && (
         <polyline
-          key={JSON.stringify(activeLaser.points)}
+          key={`${replayVersion}:${JSON.stringify(activeLaser.points)}`}
           className={animate ? "laser-path animate-laser" : "laser-path"}
           points={activeLaser.points
             .map(([x, y]) => `${M + x * Z},${M + y * Z}`)
@@ -272,7 +314,7 @@ export function GameBoard({
               onPointerLeave={() => setHover(null)}
               onFocus={() => {
                 setFocus([r, c]);
-                setHover([r, c]);
+                if (pointer.current === "keyboard") setHover([r, c]);
               }}
               onBlur={() => setHover(null)}
               onClick={() => onCell(r, c)}
@@ -330,7 +372,9 @@ export function GameBoard({
                 tabIndex={clickable ? 0 : undefined}
                 aria-disabled={onLaser ? !clickable : undefined}
                 aria-label={`Fire laser ${getLabel(side, i, cols, rows)}`}
-                className={clickable ? "laser-label" : ""}
+                className="laser-label"
+                data-lit={lit}
+                data-used={used}
                 onClick={() => clickable && onLaser(side, i)}
                 onKeyDown={(e) =>
                   clickable && keyboard(e, () => onLaser(side, i))

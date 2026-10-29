@@ -1,5 +1,6 @@
 import { ResultDialog } from "./ResultDialog.jsx";
 import { ExtraOptions } from "./ExtraOptions.jsx";
+import { writeJSON } from "../game/storage.js";
 import { unlockAudio } from "../game/audio.js";
 import { useState, useEffect } from "react";
 import { useGameSession } from "../hooks/useGameSession.js";
@@ -17,6 +18,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
     [howTo, setHowTo] = useState(false),
     [confirm, setConfirm] = useState(null);
   const [review, setReview] = useState("compare"),
+    [replay, setReplay] = useState(null),
     [resultOpen, setResultOpen] = useState(false),
     [freshResult, setFreshResult] = useState(false),
     [selectionVersion, setSelectionVersion] = useState(0),
@@ -32,6 +34,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
   }, []);
   useEffect(() => {
     setSelected(null);
+    setReplay(null);
     setReview("compare");
     setResultOpen(false);
     setShareMessage("");
@@ -80,7 +83,12 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
         (h.side === side && h.idx === idx) ||
         (h.exitSide === side && h.exitIdx === idx),
     );
-    if (finished && existing < 0) return;
+    if (finished) {
+      setSelected(existing < 0 ? null : existing);
+      setSelectionVersion((v) => v + 1);
+      setReplay({ ...fireLaser(puzzle.board, side, idx), side, idx });
+      return;
+    }
     setSelected(existing < 0 ? history.length : existing);
     setSelectionVersion((v) => v + 1);
     if (!finished) {
@@ -124,16 +132,14 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
           review. <button onClick={onDaily}>Open today's puzzle</button>
         </p>
       )}
-      <div className="session-bar">
-        <span>
-          {cols} × {rows} · {pieces.length} pieces
-        </span>
-        <span>
-          {history.length} lasers{game.timed ? ` · ${time}` : ""}
-        </span>
-      </div>
       <div className="play-layout">
         <section className="board-panel">
+          <div className="board-stats">
+            <span>◷ {time}</span>
+            <span>
+              ↗ {history.length} {history.length === 1 ? "laser" : "lasers"}
+            </span>
+          </div>
           <GameBoard
             cols={cols}
             rows={rows}
@@ -143,19 +149,19 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             revealed={finished ? puzzle.placed : null}
             compare={finished && review === "compare"}
             hideNotes={finished}
-            newLaserLocked={finished}
             hintPiece={!finished && hint?.level === 3 ? hint.piece : null}
             locked={finished}
             onCell={(r, c) => state.cell(r, c, color)}
             onEdge={(key) => state.edge(key, color)}
             onLaser={fire}
             selectedColor={color}
-            activeLaser={
-              finished && selected !== null ? history[selected] : null
-            }
+            activeLaser={finished ? replay : null}
+            replayVersion={selectionVersion}
             animate={effects}
             queries={history}
-            highlight={selected !== null ? history[selected] : null}
+            highlight={
+              finished ? replay : selected !== null ? history[selected] : null
+            }
           />
         </section>
         <div className="game-sidebar">
@@ -224,7 +230,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                         New board
                       </button>
                       <button onClick={() => setOptionsOpen(true)}>
-                        Extras
+                        Settings
                       </button>
                       <button
                         disabled={game.hintStep >= pieces.length * 3}
@@ -250,8 +256,11 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             selected={selected}
             selectionVersion={selectionVersion}
             onSelect={(i) => {
-              setSelected(i);
-              setSelectionVersion((v) => v + 1);
+              if (finished) fire(history[i].side, history[i].idx);
+              else {
+                setSelected(i);
+                setSelectionVersion((v) => v + 1);
+              }
             }}
           />
         </div>
@@ -270,8 +279,14 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
         />
       )}
       {optionsOpen && (
-        <Dialog title="Train mode extras" onClose={() => setOptionsOpen(false)}>
-          <ExtraOptions value={nextExtras} onChange={setNextExtras} />
+        <Dialog title="Training settings" onClose={() => setOptionsOpen(false)}>
+          <ExtraOptions
+            value={nextExtras}
+            onChange={(value) => {
+              setNextExtras(value);
+              writeJSON("shapeit:training-extras", value);
+            }}
+          />
           <p className="muted small">Applies to your next board.</p>
           <button className="primary" onClick={() => setOptionsOpen(false)}>
             Done

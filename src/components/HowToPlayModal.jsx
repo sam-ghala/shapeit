@@ -1749,10 +1749,11 @@ export function HowToPlayModal({ onClose, pieces, cols = 10, rows = 8 }) {
         <h3>1 vs 1</h3>
         <p>
           Join with a link or a four-digit code. Two computers use 10×8; if
-          either player uses a phone, both use 7×5. You have 60 seconds to
-          arrange a legal board; both players can finish early. An initial legal
-          arrangement is supplied and your latest accepted arrangement is used
-          when time runs out.
+          either player uses a phone, both use 7×5. Both receive the same normal
+          pieces for that board size. Start with an empty board, select a shape
+          and place it. There is no setup timer: play starts when both players
+          confirm complete, legal boards. Only the two extra pieces are
+          optional.
         </p>
         <p>
           Take turns firing one laser. Both players see each query and its

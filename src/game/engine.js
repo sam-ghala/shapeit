@@ -359,33 +359,45 @@ export function placementError(placed, cols, rows, requireReachable = true) {
   }
   return null;
 }
-export function validatePlacements(input, pieces, cols, rows) {
-  if (!Array.isArray(input) || input.length !== pieces.length)
+export function validatePlacements(input, pieces, cols, rows, partial = false) {
+  if (
+    !Array.isArray(input) ||
+    input.length > pieces.length ||
+    (!partial && input.length !== pieces.length)
+  )
     throw new Error("Place every piece.");
-  const placed = pieces.map((p) => {
-    const candidate = input.find((v) => v.id === p.id);
-    if (
-      !candidate ||
-      !Array.isArray(candidate.absCells) ||
-      candidate.absCells.length !== p.cells.length
-    )
-      throw new Error("Invalid piece.");
-    if (
-      candidate.absCells.some(
-        (c) =>
-          !Array.isArray(c) ||
-          c.length !== 3 ||
-          !Number.isInteger(c[0]) ||
-          !Number.isInteger(c[1]) ||
-          !FLAT_SIDES[c[2]],
+  const ids = input.map((p) => p?.id);
+  if (
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => !pieces.some((p) => p.id === id))
+  )
+    throw new Error("Invalid piece selection.");
+  const placed = pieces
+    .filter((p) => ids.includes(p.id))
+    .map((p) => {
+      const candidate = input.find((v) => v.id === p.id);
+      if (
+        !candidate ||
+        !Array.isArray(candidate.absCells) ||
+        candidate.absCells.length !== p.cells.length
       )
-    )
-      throw new Error("Invalid cell.");
-    const norm = rotateCells(candidate.absCells, 0);
-    if (shapeKey(norm) !== shapeKey(p.cells))
-      throw new Error("A piece has the wrong shape.");
-    return { ...p, absCells: candidate.absCells };
-  });
+        throw new Error("Invalid piece.");
+      if (
+        candidate.absCells.some(
+          (c) =>
+            !Array.isArray(c) ||
+            c.length !== 3 ||
+            !Number.isInteger(c[0]) ||
+            !Number.isInteger(c[1]) ||
+            !FLAT_SIDES[c[2]],
+        )
+      )
+        throw new Error("Invalid cell.");
+      const norm = rotateCells(candidate.absCells, 0);
+      if (shapeKey(norm) !== shapeKey(p.cells))
+        throw new Error("A piece has the wrong shape.");
+      return { ...p, absCells: candidate.absCells };
+    });
   const error = placementError(placed, cols, rows);
   if (error) throw new Error(error);
   return placed;

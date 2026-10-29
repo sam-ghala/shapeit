@@ -6,10 +6,15 @@ import {
   applyAction,
   advanceRoom,
   roomView,
-  SETUP_MS,
   FINAL_MS,
 } from "../src/server/duel.js";
-import { SIZES, solutionDrawing, emptyBoard } from "../src/game/engine.js";
+import {
+  SIZES,
+  solutionDrawing,
+  emptyBoard,
+  generatePuzzle,
+  buildPieces,
+} from "../src/game/engine.js";
 const profiles = [
   { id: "player-one", name: "Robin" },
   { id: "player-two", name: "Sam" },
@@ -23,7 +28,15 @@ function setup(mobile = false) {
 function playing() {
   const r = setup(true);
   for (let i = 0; i < 2; i++)
-    applyAction(r, i, { type: "ready", placed: r.players[i].placed }, 3000);
+    applyAction(
+      r,
+      i,
+      {
+        type: "ready",
+        placed: generatePuzzle(`test:${i}`, r.players[i].pieces, 7, 5).placed,
+      },
+      3000,
+    );
   return r;
 }
 function correct(r, player) {
@@ -53,18 +66,46 @@ test("only host changes settings and starts, then settings lock", () => {
   assert.throws(() => applyAction(r, 0, { type: "settings", settings: {} }));
   assert.deepEqual(r.players[0].pieces, r.players[1].pieces);
 });
-test("deadline uses existing legal placements and rejects late board edits", () => {
+test("setup starts empty, has no deadline and accepts legal partial placements", () => {
   const r = setup(true);
-  advanceRoom(r, 2000 + SETUP_MS);
-  assert.equal(r.phase, "playing");
+  assert.deepEqual(r.players[0].placed, []);
+  assert.equal(r.deadline, null);
+  advanceRoom(r, 999999);
+  assert.equal(r.phase, "setup");
+  assert.throws(() =>
+    applyAction(r, 0, { type: "ready", placed: [] }, 1000000),
+  );
+  const placed = generatePuzzle("partial", r.players[0].pieces, 7, 5).placed;
+  applyAction(r, 0, { type: "place", placed: placed.slice(0, 1) }, 1000000);
+  assert.equal(r.players[0].placed.length, 1);
   assert.throws(() =>
     applyAction(
       r,
       0,
-      { type: "place", placed: r.players[0].placed },
-      2000 + SETUP_MS + 1,
+      { type: "place", placed: [placed[0], placed[0]] },
+      1000001,
     ),
   );
+  applyAction(r, 0, { type: "place", placed: [] }, 1000002);
+  assert.deepEqual(r.players[0].placed, []);
+});
+test("duels use the daily shape pool for their board size, with identical sets", () => {
+  for (const mobile of [true, false]) {
+    const room = createRoom(
+      "0123",
+      profiles[0],
+      mobile,
+      { sameShapes: false, allowed: ["bad"] },
+      1000,
+    );
+    joinRoom(room, profiles[1], mobile);
+    applyAction(room, 0, { type: "start" }, 2000);
+    assert.deepEqual(
+      room.players[0].pieces,
+      buildPieces(`${room.id}:shared`, room.size),
+    );
+    assert.deepEqual(room.players[0].pieces, room.players[1].pieces);
+  }
 });
 test("turns are enforced; public queries omit hidden paths and hit identities", () => {
   const r = playing(),
@@ -184,7 +225,11 @@ test("rematch requires both players, keeps room access and alternates the starte
     applyAction(
       room,
       i,
-      { type: "ready", placed: room.players[i].placed },
+      {
+        type: "ready",
+        placed: generatePuzzle(`rematch:${i}`, room.players[i].pieces, 7, 5)
+          .placed,
+      },
       6000,
     );
   assert.equal(room.turn, 1 - starter);

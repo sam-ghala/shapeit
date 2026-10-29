@@ -1,16 +1,13 @@
 import { normalizeExtras } from "../game/extras.js";
 import {
   SIZES,
-  SHAPES,
   buildPieces,
-  generatePuzzle,
   validatePlacements,
   boardFromPlaced,
   fireLaser,
   checkSolution,
 } from "../game/engine.js";
-export const SETUP_MS = 60_000,
-  FINAL_MS = 60_000,
+export const FINAL_MS = 60_000,
   ROOM_MS = 2 * 60 * 60_000;
 export function cleanProfile(input) {
   if (
@@ -28,14 +25,7 @@ export function cleanProfile(input) {
   return { id: input.id, name };
 }
 export function roomSettings(input = {}) {
-  const allowed = Array.isArray(input.allowed)
-    ? [...new Set(input.allowed.filter((k) => SHAPES.some((s) => s.key === k)))]
-    : SHAPES.map((s) => s.key);
-  return {
-    sameShapes: input.sameShapes !== false,
-    extras: normalizeExtras(input.extras),
-    allowed,
-  };
+  return { sameShapes: true, extras: normalizeExtras(input.extras) };
 }
 function player(profile, mobile) {
   return {
@@ -81,10 +71,8 @@ export function playerIndex(room, token) {
   return room.players.findIndex((p) => p.token === token);
 }
 export function advanceRoom(room, now = Date.now()) {
-  if (
-    room.phase === "setup" &&
-    (now >= room.deadline || room.players.every((p) => p.ready))
-  ) {
+  if (room.phase === "setup") room.deadline = null;
+  if (room.phase === "setup" && room.players.every((p) => p.ready)) {
     room.phase = "playing";
     room.startedAt = now;
     room.turn = room.starter;
@@ -150,33 +138,31 @@ export function applyAction(room, index, action, now = Date.now()) {
     case "start": {
       if (index !== 0 || room.phase !== "lobby" || room.players.length !== 2)
         throw new Error("Two players are needed to start.");
-      const count = room.size === "classic" ? 5 : 4;
-      if (room.settings.allowed.length < count)
-        throw new Error(`Choose at least ${count} allowed shapes.`);
-      room.players.forEach((member, i) => {
+      room.settings = roomSettings(room.settings);
+      room.players.forEach((member) => {
         member.pieces = buildPieces(
-          `${room.id}:${room.settings.sameShapes ? "shared" : i}`,
+          `${room.id}:shared`,
           room.size,
           room.settings.extras,
-          room.settings.allowed,
         );
-        member.placed = generatePuzzle(
-          `${room.id}:board:${i}`,
-          member.pieces,
-          cols,
-          rows,
-        ).placed;
+        member.placed = [];
       });
       room.starter = crypto.getRandomValues(new Uint8Array(1))[0] % 2;
       room.phase = "setup";
-      room.deadline = now + SETUP_MS;
+      room.deadline = null;
       break;
     }
     case "place":
     case "ready":
       if (room.phase !== "setup" || p.ready)
         throw new Error("Your board is already locked.");
-      p.placed = validatePlacements(action.placed, p.pieces, cols, rows);
+      p.placed = validatePlacements(
+        action.placed,
+        p.pieces,
+        cols,
+        rows,
+        action.type === "place",
+      );
       if (action.type === "ready") p.ready = true;
       break;
     case "laser": {

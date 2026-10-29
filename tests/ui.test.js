@@ -5,7 +5,12 @@ import TestRenderer, { act } from "react-test-renderer";
 import { build } from "esbuild";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { createSession, writeJSON, sessionKey } from "../src/game/storage.js";
+import {
+  createSession,
+  writeJSON,
+  readJSON,
+  sessionKey,
+} from "../src/game/storage.js";
 import {
   buildPieces,
   generatePuzzle,
@@ -275,5 +280,108 @@ test("score animation reaches its final value even when background animation fra
   } finally {
     act(() => view.unmount());
     globalThis.requestAnimationFrame = raf;
+  }
+});
+
+test("finished boards allow every laser from its clicked entry without changing the result", () => {
+  entries.clear();
+  const view = mount(SoloGame, {
+    config,
+    profile: { id: "replay-test", name: "Test" },
+    effects: true,
+    onHome() {},
+    onDaily() {},
+  });
+  act(() => button(view, "Submit solution").props.onClick());
+  act(() => button(view, "See board").props.onClick());
+  const before = readJSON(sessionKey("training", "compact", config.date), null);
+  const labels = view.root.findAll(
+    (n) =>
+      n.props.role === "button" &&
+      n.props["aria-label"]?.startsWith("Fire laser"),
+  );
+  assert.equal(labels.length, 24);
+  assert.ok(labels.every((n) => !n.props["aria-disabled"]));
+  act(() =>
+    labels
+      .find((n) => n.props["aria-label"] === "Fire laser F")
+      .props.onClick(),
+  );
+  const path = view.root.findByType("polyline");
+  assert.ok(path.props.points.startsWith("56,272"), path.props.points);
+  assert.deepEqual(
+    readJSON(sessionKey("training", "compact", config.date), null),
+    before,
+  );
+  act(() => view.unmount());
+});
+test("existing strokes have no diagonal hover preview and touch clears hover without leaving focus marks", () => {
+  const guess = emptyBoard(7, 5);
+  guess[0][0] = { color: "yellow", type: "\\" };
+  const view = mount(GameBoard, {
+    cols: 7,
+    rows: 5,
+    guess,
+    onCell() {},
+    onEdge() {},
+    selectedColor: "yellow",
+  });
+  const cell = () => view.root.findByProps({ "data-cell": "0-0" });
+  const lineCount = view.root.findAllByType("line").length;
+  act(() => cell().props.onPointerEnter({ pointerType: "mouse" }));
+  assert.equal(view.root.findAllByType("line").length, lineCount);
+  act(() =>
+    view.root
+      .findByType("svg")
+      .props.onPointerDownCapture({ pointerType: "touch" }),
+  );
+  act(() => cell().props.onFocus());
+  assert.equal(
+    view.root.findAllByType("rect").some((n) => n.props.fill === "#596b801c"),
+    false,
+  );
+  act(() => view.unmount());
+});
+test("overlay opacity is applied once to the whole drawing, avoiding darker joined corners", () => {
+  const guess = emptyBoard(7, 5);
+  guess[0][0] = { color: "red", type: "/" };
+  const view = mount(GameBoard, {
+    cols: 7,
+    rows: 5,
+    guess,
+    edges: { "h-0-0": "red" },
+    compare: true,
+    revealed: [],
+    locked: true,
+  });
+  const strokes = view.root.findByProps({ className: "drawing-strokes" });
+  assert.equal(strokes.props.opacity, 0.42);
+  assert.ok(
+    strokes.findAllByType("line").every((n) => n.props.opacity === undefined),
+  );
+  act(() => view.unmount());
+});
+test("phone menu has no board-size choice and training opens without an extras dialog", async () => {
+  entries.clear();
+  globalThis.location = { pathname: "/", search: "" };
+  const oldAgent = navigator.userAgent;
+  navigator.userAgent = "Android";
+  const App = await component("src/App.jsx", "default");
+  const view = mount(App, {});
+  try {
+    assert.equal(
+      view.root.findAll((n) => n.props["aria-label"] === "Board size").length,
+      0,
+    );
+    act(() => button(view, "△Train mode▶").props.onClick());
+    assert.equal(view.root.findAllByType("dialog").length, 0);
+    assert.ok(button(view, "Submit solution"));
+    const board = view.root
+      .findAllByType("svg")
+      .find((n) => n.props.className === "game-board");
+    assert.equal(board.props.viewBox, "0 0 400 304");
+  } finally {
+    act(() => view.unmount());
+    navigator.userAgent = oldAgent;
   }
 });

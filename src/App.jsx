@@ -16,7 +16,6 @@ import { AdminPage } from "./components/AdminPage.jsx";
 import { InstallButton } from "./components/InstallButton.jsx";
 import { HowToPlayModal } from "./components/HowToPlayModal.jsx";
 import { Dialog } from "./components/Dialog.jsx";
-import { ExtraOptions } from "./components/ExtraOptions.jsx";
 import { Scoreboard } from "./components/Scoreboard.jsx";
 export default function ShapeIt() {
   const initialCode = new URLSearchParams(location.search).get("room") || "";
@@ -30,23 +29,19 @@ export default function ShapeIt() {
   const [profile, setProfile] = useState(getProfile),
     [name, setName] = useState(profile.name),
     [profileOpen, setProfileOpen] = useState(false);
+  const phone = mobilePlayer();
   const [size, setSize] = useState(() =>
-    window.matchMedia("(max-width:860px)").matches ? "compact" : "classic",
+    phone || window.matchMedia("(max-width:860px)").matches
+      ? "compact"
+      : "classic",
   );
-  const [extras, setExtras] = useState(() =>
-    readJSON("shapeit:training-extras", false),
-  );
-  const [trainingOpen, setTrainingOpen] = useState(false),
-    [scoresOpen, setScoresOpen] = useState(false),
+  const [scoresOpen, setScoresOpen] = useState(false),
     [howTo, setHowTo] = useState(false);
   const [config, setConfig] = useState(null),
     [today, setToday] = useState(dailyDate());
   useEffect(() => {
     writeJSON("shapeit:profile", profile);
   }, [profile]);
-  useEffect(() => {
-    writeJSON("shapeit:training-extras", extras);
-  }, [extras]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
@@ -71,13 +66,16 @@ export default function ShapeIt() {
       mode,
       size,
       date: dailyDate(),
-      extras: mode === "training" ? extras : false,
+      extras:
+        mode === "training"
+          ? readJSON("shapeit:training-extras", false)
+          : false,
       timed: true,
     };
-    if (fresh)
+    const previous = readJSON(sessionKey(mode, size, next.date), null);
+    if (fresh || (mode === "training" && previous?.status !== "playing"))
       writeJSON(sessionKey(mode, size, next.date), createSession(next));
     setConfig(next);
-    setTrainingOpen(false);
     setScreen("solo");
   };
   if (screen === "admin") return <AdminPage onHome={home} />;
@@ -118,13 +116,14 @@ export default function ShapeIt() {
         : daily?.startedAt
           ? "In progress"
           : "Not played yet";
-  const train = readJSON(sessionKey("training", size, today), null);
-  const canResume =
-    validSession(train, { mode: "training", size, date: today }) &&
-    train.status === "playing";
   return (
     <main className="arcade-menu">
       <header className="menu-top">
+        <div className="game-title">
+          <h1>
+            Shape<span>It</span>
+          </h1>
+        </div>
         <button
           className="name-button"
           onClick={() => {
@@ -135,30 +134,24 @@ export default function ShapeIt() {
           {profile.name || "Select your name"} <span aria-hidden="true">✎</span>
         </button>
       </header>
-      <div className="game-title">
-        <div className="title-shapes" aria-hidden="true">
-          <i />
-          <i />
-          <i />
+      {!phone && (
+        <div className="board-choice" role="group" aria-label="Board size">
+          <button
+            aria-pressed={size === "compact"}
+            onClick={() => setSize("compact")}
+          >
+            <span aria-hidden="true">{size === "compact" ? "✓" : "◇"}</span>{" "}
+            Small board <small>7 × 5</small>
+          </button>
+          <button
+            aria-pressed={size === "classic"}
+            onClick={() => setSize("classic")}
+          >
+            <span aria-hidden="true">{size === "classic" ? "✓" : "◇"}</span> Big
+            board <small>10 × 8</small>
+          </button>
         </div>
-        <h1>
-          Shape<span>It</span>
-        </h1>
-      </div>
-      <div className="board-choice" role="group" aria-label="Board size">
-        <button
-          aria-pressed={size === "compact"}
-          onClick={() => setSize("compact")}
-        >
-          7 × 5
-        </button>
-        <button
-          aria-pressed={size === "classic"}
-          onClick={() => setSize("classic")}
-        >
-          10 × 8
-        </button>
-      </div>
+      )}
       <nav className="arcade-modes" aria-label="Game modes">
         <button
           className={`arcade-mode daily-mode ${complete ? "complete" : "pending"}`}
@@ -175,7 +168,7 @@ export default function ShapeIt() {
         </button>
         <button
           className="arcade-mode train-mode"
-          onClick={() => setTrainingOpen(true)}
+          onClick={() => start("training")}
         >
           <span className="mode-icon" aria-hidden="true">
             △
@@ -204,25 +197,6 @@ export default function ShapeIt() {
       <footer className="menu-credit">
         Robin & Sam · Daily resets at midnight UTC
       </footer>
-      {trainingOpen && (
-        <Dialog title="Train mode" onClose={() => setTrainingOpen(false)}>
-          <ExtraOptions value={extras} onChange={setExtras} />
-          <p className="muted small">
-            For your next board. The clock is always on.
-          </p>
-          <div className="training-actions">
-            {canResume && (
-              <button onClick={() => start("training")}>Continue board</button>
-            )}
-            <button
-              className="primary next-board"
-              onClick={() => start("training", true)}
-            >
-              New board →
-            </button>
-          </div>
-        </Dialog>
-      )}
       {profileOpen && (
         <Dialog title="Your name" onClose={() => setProfileOpen(false)}>
           <form

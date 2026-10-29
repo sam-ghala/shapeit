@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { solutionDrawing } from "../src/game/engine.js";
+import { solutionDrawing, generatePuzzle } from "../src/game/engine.js";
 const base = process.env.TEST_BASE_URL || "http://127.0.0.1:8787";
 const adminKey = process.env.TEST_ADMIN_KEY || "local-test-only";
 let calls = 0;
@@ -48,8 +48,13 @@ assert.equal(host.phase, "setup");
 assert.equal(host.players[1].placed, undefined);
 assert.equal(guest.players[0].placed, undefined);
 assert.ok(host.players[0].pieces.some((p) => p.color === "transparent"));
-const boards = [host.players[0].placed, guest.players[1].placed];
-await action(0, { type: "place", placed: [] }, 400);
+const boards = [host.players[0], guest.players[1]].map(
+  (p, i) => generatePuzzle(`http:${i}`, p.pieces, 7, 5).placed,
+);
+assert.deepEqual(host.players[0].placed, []);
+assert.equal(host.deadline, null);
+await action(0, { type: "ready", placed: [] }, 400);
+await action(0, { type: "place", placed: boards[0].slice(0, 1) });
 await action(0, { type: "ready", placed: boards[0] });
 const playing = (await action(1, { type: "ready", placed: boards[1] })).room;
 assert.equal(playing.phase, "playing");

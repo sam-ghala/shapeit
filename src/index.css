@@ -2,6 +2,8 @@
   box-sizing: border-box;
 }
 :root {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   font-family:
     ui-rounded,
     "SF Pro Rounded",
@@ -10,13 +12,21 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #223144;
-  background: #f7f8fb;
+  color-scheme: only light;
+  --paper: #fffefa;
+  --ink: #263646;
+  --muted: #67798c;
+  --surface: #fffefa;
+  --canvas: #fff8e8;
+  --soft: #eaf4fa;
+  color: var(--ink);
+  background: var(--canvas);
   font-size: 15px;
   line-height: 1.45;
 }
 body {
   margin: 0;
+  background: var(--canvas);
 }
 button,
 input,
@@ -26,16 +36,18 @@ select {
   -webkit-tap-highlight-color: transparent;
 }
 button {
-  border: 1.5px solid #d9e0e9;
-  background: white;
+  border: 2px solid var(--ink);
+  background: var(--paper);
   border-radius: 10px;
   padding: 9px 14px;
   min-height: 42px;
   cursor: pointer;
   font-weight: 700;
 }
-button:hover:not(:disabled) {
-  background: #eef3fa;
+@media (hover: hover) and (pointer: fine) {
+  button:hover:not(:disabled) {
+    background: var(--soft);
+  }
 }
 button:disabled {
   opacity: 0.5;
@@ -108,12 +120,13 @@ legend {
   margin-bottom: 12px;
 }
 .primary {
-  background: #2677d4;
-  border-color: #2677d4;
-  color: white;
+  background: #65c9ea;
+  border-color: #263646;
+  color: #203247;
+  box-shadow: 0 3px 0 #263646;
 }
 .primary:hover:not(:disabled) {
-  background: #1964bb;
+  background: #8cddf6;
 }
 .next-board {
   font-size: 18px;
@@ -133,7 +146,7 @@ legend {
   background: transparent;
 }
 .muted {
-  color: #67798c;
+  color: var(--muted);
 }
 .small {
   font-size: 12px;
@@ -149,8 +162,9 @@ legend {
 .card {
   min-width: 0;
   padding: 22px;
-  background: white;
-  border: 1px solid #dbe3ed;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 0 4px 0 #263646;
   border-radius: 14px;
   display: flex;
   flex-direction: column;
@@ -164,7 +178,7 @@ legend {
 .game-shell {
   max-width: 1440px;
   padding: 14px 24px;
-  --play-height: calc(100dvh - 145px);
+  --play-height: calc(100dvh - 90px);
 }
 .duel-shell {
   --play-height: calc(100dvh - 220px);
@@ -216,7 +230,7 @@ legend {
   width: 100%;
   height: auto;
   max-width: 800px;
-  max-height: var(--play-height);
+  max-height: calc(var(--play-height) - 38px);
   margin: auto;
   overflow: visible;
   touch-action: manipulation;
@@ -241,13 +255,15 @@ legend {
 }
 .piece-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
   gap: 5px;
 }
 .piece-choice {
-  padding: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 2px;
   min-height: 42px;
   border: 0;
   background: transparent;
@@ -259,7 +275,9 @@ legend {
 .piece-choice svg {
   display: block;
   max-height: 42px;
-  width: auto;
+  max-width: 100%;
+  width: 100%;
+  margin: auto;
 }
 .piece-choice.placed {
   opacity: 0.4;
@@ -306,8 +324,7 @@ legend {
   stroke-width: 2;
   outline: none;
 }
-.edge-target:focus-visible,
-.edge-target:hover {
+.edge-target:focus-visible {
   stroke: #668bad;
   stroke-opacity: 0.3;
   outline: none;
@@ -315,13 +332,12 @@ legend {
 .laser-label:focus-visible {
   outline: none;
 }
-.laser-label:hover rect,
 .laser-label:focus-visible rect {
   fill: #dceafa;
 }
 .query-log {
-  background: white;
-  border: 1px solid #dce3eb;
+  background: var(--paper);
+  border: 2px solid var(--ink);
   border-radius: 12px;
   padding: 12px;
   min-width: 0;
@@ -454,8 +470,8 @@ legend {
   padding: 24px;
   border: 2px solid #263646;
   border-radius: 18px;
-  color: #263646;
-  background: #fffefa;
+  color: var(--ink);
+  background: var(--paper);
   box-shadow:
     0 10px 0 #19273825,
     0 20px 80px #172b4440;
@@ -661,10 +677,15 @@ legend {
 }
 /* A small, tactile game menu rather than a settings dashboard. */
 .arcade-menu {
-  max-width: 510px;
-  min-height: 100dvh;
+  max-width: 560px;
+  height: 100svh;
+  min-height: 0;
   margin: auto;
-  padding: 24px 24px 18px;
+  padding: clamp(12px, 3vh, 24px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(10px, 2vh, 18px);
 }
 body:has(.arcade-menu) {
   background: #fff8de;
@@ -673,7 +694,9 @@ body:has(.arcade-menu) {
 }
 .menu-top {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 .name-button {
   background: #fffefa;
@@ -685,13 +708,14 @@ body:has(.arcade-menu) {
 .game-title {
   text-align: center;
   position: relative;
-  padding: 24px 0 12px;
+  padding: 0;
+  min-width: 0;
 }
 .game-title h1 {
   position: relative;
-  font-size: clamp(56px, 10vw, 76px);
+  font-size: clamp(36px, 8vw, 58px);
   font-weight: 950;
-  letter-spacing: -4px;
+  letter-spacing: -2.5px;
   color: #25374c;
   text-shadow: 3px 3px 0 #fff;
 }
@@ -724,7 +748,7 @@ body:has(.arcade-menu) {
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin: 8px 0 22px;
+  margin: 0;
 }
 .board-choice button {
   min-height: 34px;
@@ -733,12 +757,16 @@ body:has(.arcade-menu) {
   background: #fffefa;
 }
 .board-choice button[aria-pressed="true"] {
-  background: #263646;
-  color: white;
+  background: #65c9ea;
+  color: #203247;
+  box-shadow: 0 3px 0 #263646;
 }
 .arcade-modes {
   display: grid;
-  gap: 16px;
+  gap: 14px;
+  flex: 0 1 330px;
+  min-height: 0;
+  grid-template-rows: repeat(3, minmax(64px, 1fr));
 }
 .arcade-mode {
   display: grid;
@@ -749,7 +777,7 @@ body:has(.arcade-menu) {
   border: 3px solid #263646;
   border-radius: 15px;
   box-shadow: 0 6px 0 #263646;
-  min-height: 92px;
+  min-height: 64px;
   padding: 14px 18px;
   transition:
     transform 0.1s,
@@ -764,6 +792,7 @@ body:has(.arcade-menu) {
 }
 .arcade-mode strong {
   display: block;
+  white-space: nowrap;
   font-size: 29px;
   font-weight: 900;
   letter-spacing: -0.7px;
@@ -806,7 +835,7 @@ body:has(.arcade-menu) {
 .menu-shortcuts {
   display: flex;
   gap: 12px;
-  margin-top: 26px;
+  margin-top: 0;
 }
 .menu-shortcuts button {
   flex: 1;
@@ -818,7 +847,7 @@ body:has(.arcade-menu) {
 }
 .menu-install {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 0;
 }
 .menu-install:empty {
   display: none;
@@ -830,7 +859,7 @@ body:has(.arcade-menu) {
   text-decoration: underline;
 }
 .menu-credit {
-  margin-top: 24px;
+  margin-top: 0;
   text-align: center;
   font-size: 12px;
   color: #737968;
@@ -1035,7 +1064,7 @@ td {
     font-size: 23px;
   }
   .arcade-menu {
-    padding: 16px 20px;
+    padding: 14px 18px;
   }
   .arcade-mode strong {
     font-size: 26px;
@@ -1043,6 +1072,305 @@ td {
   .arcade-mode {
     grid-template-columns: 42px 1fr 18px;
     padding: 12px 15px;
-    min-height: 84px;
+    min-height: 64px;
+  }
+}
+
+/* Compact game furniture, with the same tactile colors as the menu. */
+.board-stats {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 22px;
+  min-height: 32px;
+  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.board-stats span {
+  background: var(--soft);
+  padding: 3px 12px;
+  border-radius: 20px;
+}
+.name-button {
+  max-width: 43%;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.board-choice button {
+  flex: 1;
+  color: #263646;
+  font-weight: 800;
+}
+.board-choice small {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+}
+.board-choice button[aria-pressed="true"] {
+  outline: 2px solid #263646;
+  outline-offset: 2px;
+}
+.game-board,
+.game-board * {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.game-board [role="button"] {
+  outline: none;
+}
+.game-board,
+.piece-choice svg,
+.placement-pieces svg {
+  color-scheme: only light;
+}
+.laser-label text {
+  fill: var(--muted);
+}
+.laser-label[data-lit="true"] text {
+  fill: #1e70ce;
+}
+.laser-label[data-used="true"]:not([data-lit="true"]) text {
+  opacity: 0.6;
+}
+.placement-pieces {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+.placement-pieces button {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  padding: 6px;
+  justify-content: center;
+}
+.placement-pieces svg {
+  max-width: 100%;
+  max-height: 54px;
+}
+.placement-pieces .is-placed::after {
+  content: "✓";
+  position: absolute;
+  right: 2px;
+  top: -7px;
+  background: #abe1ae;
+  color: #263646;
+  border-radius: 100%;
+  width: 19px;
+  height: 19px;
+  font-size: 13px;
+}
+.placement-pieces button[aria-pressed="true"] {
+  border-color: #263646;
+  background: #ffd253;
+}
+.card h2 {
+  color: #b6523f;
+}
+.large-code {
+  color: #1478a0;
+}
+.badge {
+  background: #ffde7d;
+  color: #463822;
+  border: 1px solid #d8b54e;
+}
+.query-log h3 {
+  color: var(--ink);
+}
+.session-bar {
+  background: var(--soft);
+}
+.extra-choice {
+  border: 2px solid var(--ink);
+}
+.extra-choice:has(input:checked) {
+  background: #b9e8d9;
+  border-color: #263646;
+  color: #263646;
+}
+@media (hover: hover) and (pointer: fine) {
+  .edge-target:hover {
+    stroke: #668bad;
+    stroke-opacity: 0.3;
+  }
+  .laser-label:hover rect {
+    fill: #dceafa;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .cell-target:focus,
+  .edge-target:focus {
+    stroke: transparent;
+    outline: none;
+  }
+  .laser-label:focus rect {
+    outline: none;
+  }
+  .arcade-mode:hover:not(:disabled) {
+    transform: none;
+  }
+}
+@media (max-height: 620px) {
+  .arcade-menu {
+    gap: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .arcade-modes {
+    flex-basis: 250px;
+    gap: 10px;
+  }
+  .game-title h1 {
+    font-size: 38px;
+  }
+  .arcade-mode strong {
+    font-size: 24px;
+  }
+  .arcade-mode {
+    padding: 8px 14px;
+  }
+  .menu-credit {
+    font-size: 10px;
+  }
+}
+@media (max-width: 380px) {
+  .arcade-menu {
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  .arcade-mode {
+    grid-template-columns: 32px minmax(0, 1fr) 16px;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .arcade-mode strong {
+    font-size: 22px;
+  }
+  .arcade-mode .mode-icon {
+    font-size: 32px;
+  }
+  .arcade-mode small {
+    font-size: 12px;
+  }
+  .menu-shortcuts button {
+    font-size: 15px;
+    padding: 8px;
+    min-height: 44px;
+    white-space: nowrap;
+  }
+  .menu-install button {
+    font-size: 12px;
+  }
+}
+@media (max-width: 860px) {
+  .board-stats {
+    font-size: 13px;
+    gap: 10px;
+  }
+  .piece-list {
+    gap: 3px;
+  }
+  .game-title h1 {
+    font-size: clamp(34px, 10vw, 48px);
+  }
+  .name-button {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .game-board {
+    max-height: none;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: only dark;
+    --canvas: #182431;
+    --paper: #253748;
+    --surface: #253748;
+    --ink: #e6eef5;
+    --muted: #b5c7d7;
+    --soft: #30475b;
+  }
+  body:has(.arcade-menu) {
+    background-color: #182431;
+    background-image: radial-gradient(#364754 1px, transparent 1px);
+  }
+  .arcade-mode,
+  .board-choice,
+  .menu-shortcuts,
+  .name-button {
+    color-scheme: only light;
+    color: #263646;
+  }
+  .game-title h1 {
+    color: #e6eef5;
+    text-shadow: 2px 3px 0 #0b1623;
+  }
+  .menu-credit,
+  .menu-install button {
+    color: #b5c7d7;
+  }
+  .primary {
+    color-scheme: only light;
+  }
+  .card h2 {
+    color: #ffab92;
+  }
+  .large-code {
+    color: #65c9ea;
+  }
+  .color-picker,
+  .piece-list,
+  .placement-pieces {
+    color-scheme: only light;
+  }
+  .color-button.selected {
+    outline-color: #f5f8fc;
+  }
+  .query-log button {
+    color: #e6eef5;
+  }
+  .query-log button.selected {
+    background: #385f82;
+  }
+  .review-tabs button[aria-pressed="true"] {
+    color: #263646;
+  }
+  input:not([type="checkbox"]),
+  select {
+    background: #253748;
+    color: #e6eef5;
+  }
+  .hint,
+  .notice {
+    background: #30475b;
+  }
+  .dialog:has(.advanced-guide) {
+    color-scheme: only light;
+    background: #fffefa;
+    color: #263646;
+  }
+  .result-dialog.success .dialog-heading h2 {
+    color: #90dfa9;
+  }
+  .result-dialog.failure .dialog-heading h2 {
+    color: #ffab92;
+  }
+  .result-score strong {
+    color: #65c9ea;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .query-player,
+  .query-colors {
+    color: var(--muted);
+  }
+  .query-colors i {
+    box-shadow: 0 0 0 1px #b5c7d766;
   }
 }
