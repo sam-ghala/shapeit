@@ -11,6 +11,8 @@ import {
   scoreBreakdown,
 } from "../game/engine.js";
 export const FINAL_MS = 60_000,
+  RACE_COUNTDOWN_MS = 3_000,
+  MAX_RACE_PLAYERS = 8,
   ROOM_MS = 2 * 60 * 60_000;
 export function cleanProfile(input) {
   if (
@@ -62,19 +64,21 @@ export function createRoom(code, profile, mobile, settings, now = Date.now()) {
     winner: null,
     round: 1,
     rematch: [],
-    wins: [0, 0],
+    wins: [0],
   };
 }
 export function joinRoom(room, profile, mobile) {
-  if (room.phase !== "lobby" || room.players.length !== 1)
+  const limit = room.settings.mode === "random" ? MAX_RACE_PLAYERS : 2;
+  if (room.phase !== "lobby" || room.players.length >= limit)
     throw new Error("This room is full or already playing.");
-  if (room.players[0].id === profile?.id)
+  if (room.players.some((p) => p.id === profile?.id))
     throw new Error(
       "You are already in this room. Use the original browser tab.",
     );
   room.players.push(player(profile, mobile));
+  room.wins = room.players.map((_, i) => room.wins?.[i] || 0);
   room.size = room.players.some((p) => p.mobile) ? "compact" : "classic";
-  return room.players[1].token;
+  return room.players.at(-1).token;
 }
 export function playerIndex(room, token) {
   return room.players.findIndex((p) => p.token === token);
@@ -83,7 +87,9 @@ export function advanceRoom(room, now = Date.now()) {
   if (room.phase === "setup") room.deadline = null;
   if (room.phase === "setup" && room.players.every((p) => p.ready)) {
     room.phase = "playing";
-    room.startedAt = now;
+    room.startedAt =
+      now +
+      (["race", "random"].includes(room.settings.mode) ? RACE_COUNTDOWN_MS : 0);
     room.turn = room.starter;
     room.lastActor = null;
     room.deadline = null;
@@ -115,17 +121,18 @@ export function advanceRoom(room, now = Date.now()) {
   ) {
     room.phase = "finished";
     room.finishedAt = now;
-    const correct = room.players.map((p) => p.submission?.correct === true);
-    if (correct[0] && correct[1]) {
-      const scores = room.players.map((p) => p.submission.score);
-      room.winner =
-        !race || scores[0] === scores[1]
-          ? "draw"
-          : scores[0] > scores[1]
-            ? 0
-            : 1;
-    } else room.winner = correct[0] ? 0 : correct[1] ? 1 : "none";
-    room.wins ||= [0, 0];
+    const correct = room.players.flatMap((p, i) =>
+      p.submission?.correct && !p.left ? [i] : [],
+    );
+    const best = Math.max(
+      ...correct.map((i) => room.players[i].submission.score),
+    );
+    room.winners = race
+      ? correct.filter((i) => room.players[i].submission.score === best)
+      : correct;
+    room.winner =
+      room.winners.length > 1 ? "draw" : (room.winners[0] ?? "none");
+    room.wins ||= room.players.map(() => 0);
     if (typeof room.winner === "number") room.wins[room.winner]++;
     room.deadline = null;
   }
@@ -173,7 +180,8 @@ function evaluateSubmission(room, index, drawing, now) {
     ? checkSolution(
         drawing.guess,
         drawing.edges,
-        room.players[1 - index].placed,
+        room.players[room.settings.mode === "random" ? index : 1 - index]
+          .placed,
         cols,
         rows,
       )
@@ -202,6 +210,44 @@ export function applyAction(room, index, action, now = Date.now()) {
   if (action.roundId && action.roundId !== room.id)
     throw new Error("This round has ended. Refresh the room.");
   if (action.type === "leave") {
+    if (room.phase === "closed") return room;
+    if (
+      room.settings.mode === "random" &&
+      room.players.length > 2 &&
+      index !== 0
+    ) {
+      if (room.phase === "lobby") {
+        room.players.splice(index, 1);
+        room.wins.splice(index, 1);
+        room.size = room.players.some((member) => member.mobile)
+          ? "compact"
+          : "classic";
+      } else {
+        p.left = true;
+        if (room.phase !== "finished") {
+          p.submission ||= evaluateSubmission(
+            room,
+            index,
+            p.draft || { guess: emptyBoard(cols, rows), edges: {} },
+            now,
+          );
+          p.submission.correct = false;
+          p.submission.score = 0;
+          p.submission.bonus = 0;
+        }
+        advanceRoom(room, now);
+        const staying = room.players.flatMap((member, i) =>
+          member.left ? [] : [i],
+        );
+        if (
+          room.phase === "finished" &&
+          staying.length >= 2 &&
+          staying.every((i) => room.rematch?.includes(i))
+        )
+          applyAction(room, 0, { type: "rematch" }, now);
+      }
+      return room;
+    }
     room.phase = "closed";
     room.closedBy = index;
     room.deadline = null;
@@ -209,13 +255,27 @@ export function applyAction(room, index, action, now = Date.now()) {
   }
   if (room.phase === "closed") throw new Error("This room is closed.");
   const race = ["race", "random"].includes(room.settings.mode);
+  if (p.left) throw new Error("You have left this room.");
+  if (
+    race &&
+    ["laser", "draft", "submit"].includes(action.type) &&
+    now < room.startedAt
+  )
+    throw new Error("Wait for the countdown to finish.");
   switch (action.type) {
     case "rematch": {
       if (room.phase !== "finished")
         throw new Error("Finish this round first.");
       room.rematch ||= [];
       if (!room.rematch.includes(index)) room.rematch.push(index);
-      if (room.rematch.length === 2) {
+      const remaining = room.players.flatMap((member, i) =>
+        member.left ? [] : [i],
+      );
+      if (remaining.length < 2)
+        throw new Error("At least two players are needed for a rematch.");
+      if (remaining.every((i) => room.rematch.includes(i))) {
+        room.wins = remaining.map((i) => room.wins[i] || 0);
+        room.players = remaining.map((i) => room.players[i]);
         const nextStarter = 1 - room.starter;
         room.id = crypto.randomUUID();
         room.round = (room.round || 1) + 1;
@@ -227,6 +287,7 @@ export function applyAction(room, index, action, now = Date.now()) {
         });
         room.queries = [];
         room.winner = null;
+        room.winners = [];
         room.lastActor = null;
         room.startedAt = null;
         room.finishedAt = null;
@@ -241,11 +302,22 @@ export function applyAction(room, index, action, now = Date.now()) {
     case "settings":
       if (index !== 0 || room.phase !== "lobby")
         throw new Error("Only the host can change lobby settings.");
-      room.settings = roomSettings(action.settings);
+      {
+        const settings = roomSettings(action.settings);
+        if (settings.mode !== "random" && room.players.length > 2)
+          throw new Error("More than two players need Random race.");
+        room.settings = settings;
+      }
       break;
     case "start": {
-      if (index !== 0 || room.phase !== "lobby" || room.players.length !== 2)
-        throw new Error("Two players are needed to start.");
+      const limit = room.settings.mode === "random" ? MAX_RACE_PLAYERS : 2;
+      if (
+        index !== 0 ||
+        room.phase !== "lobby" ||
+        room.players.length < 2 ||
+        room.players.length > limit
+      )
+        throw new Error("At least two players are needed to start.");
       room.settings = roomSettings(room.settings);
       room.players.forEach((member) => {
         member.pieces = buildPieces(
@@ -293,7 +365,8 @@ export function applyAction(room, index, action, now = Date.now()) {
         (!race && room.turn !== index)
       )
         throw new Error("Wait for your turn.");
-      const opponent = room.players[1 - index];
+      const opponent =
+        room.players[room.settings.mode === "random" ? index : 1 - index];
       const result = fireLaser(
         boardFromPlaced(opponent.placed, cols, rows),
         action.side,
@@ -377,17 +450,26 @@ export function roomView(room, index, now = Date.now()) {
     serverNow: now,
     expiresAt: room.expiresAt,
     winner: room.winner,
+    winners:
+      room.winners ||
+      (typeof room.winner === "number"
+        ? [room.winner]
+        : room.winner === "draw"
+          ? [0, 1]
+          : []),
     round: room.round || 1,
     wins: room.wins || [0, 0],
     startedAt: room.startedAt ?? null,
     rematch: room.rematch || [],
-    queries: race
-      ? room.queries.filter((q) => q.player === index)
-      : room.queries,
+    queries:
+      race && !done
+        ? room.queries.filter((q) => q.player === index)
+        : room.queries,
     players: room.players.map((p, i) => ({
       name: p.name,
       mobile: p.mobile,
       ready: p.ready,
+      left: p.left === true,
       pieces: p.pieces,
       submitted: p.submission !== null,
       ...(done || (i === index && (!race || room.phase === "setup"))

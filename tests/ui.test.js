@@ -622,7 +622,15 @@ function duelFixture(mode = "turns") {
 }
 function duelProps(room, you = 0) {
   return {
-    room: duel.roomView(room, you, 4000),
+    room: duel.roomView(
+      room,
+      you,
+      Math.max(
+        4000,
+        room.startedAt || 0,
+        ...room.players.map((p) => p.submission?.at || 0),
+      ),
+    ),
     action: async () => null,
     busy: false,
     effects: true,
@@ -678,10 +686,10 @@ test("race allows independent shots but never displays the other board, logs or 
     room,
     0,
     { type: "submit", drawing: solutionDrawing(room.players[1].placed, 7, 5) },
-    5000,
+    7000,
   );
   const draft = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
-  duel.applyAction(room, 1, { type: "draft", drawing: draft }, 6000);
+  duel.applyAction(room, 1, { type: "draft", drawing: draft }, 7500);
   act(() => rendered.update(React.createElement(DuelBoard, duelProps(room))));
   assert.ok(text(rendered.root).includes("Sam is finishing"));
   assert.equal(duelBoard(rendered).props.revealed, null);
@@ -704,6 +712,8 @@ test("race allows independent shots but never displays the other board, logs or 
 test("finished duel has board buttons and distinct original, overlay and submitted drawing views", () => {
   entries.clear();
   const room = duelFixture("race");
+  duel.applyAction(room, 0, { type: "laser", side: "top", idx: 0 }, 7000);
+  duel.applyAction(room, 1, { type: "laser", side: "left", idx: 0 }, 7000);
   const wrong = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
   duel.applyAction(
     room,
@@ -716,12 +726,20 @@ test("finished duel has board buttons and distinct original, overlay and submitt
   act(() => rendered.root.findByType("dialog").props.onCancel());
   assert.equal(rendered.root.findAllByType("select").length, 0);
   const choices = rendered.root
-    .findByProps({ "aria-label": "Choose board" })
+    .findByProps({ "aria-label": "Choose player attempt" })
     .findAllByType("button");
   act(() => choices[1].props.onClick());
   assert.equal(choices[1].props["aria-pressed"], true);
   assert.deepEqual(duelBoard(rendered).props.revealed, room.players[0].placed);
   assert.deepEqual(duelBoard(rendered).props.edges, wrong.edges);
+  const opponentLog = rendered.root.findAll(
+    (n) => typeof n.type === "function" && n.type.name === "QueryLog",
+  )[0];
+  assert.equal(opponentLog.props.title, "Sam");
+  assert.ok(opponentLog.props.history.every((q) => q.player === 1));
+  act(() => opponentLog.props.onSelect(0));
+  assert.equal(duelBoard(rendered).props.activeLaser.side, "left");
+  assert.equal(duelBoard(rendered).props.queries[0].player, 1);
   assert.equal(duelBoard(rendered).props.drawingDashed, true);
   act(() => button(rendered, "Sam's drawing").props.onClick());
   assert.equal(duelBoard(rendered).props.revealed, null);
@@ -739,7 +757,7 @@ test("finished duel has board buttons and distinct original, overlay and submitt
 
 test("duel sync sends changed drawings with the round identity and stops immediately after submit", async () => {
   entries.clear();
-  const room = duelFixture("race"),
+  const room = duelFixture("turns"),
     sent = [];
   let syncTick;
   const originalInterval = globalThis.setInterval;
@@ -1045,5 +1063,165 @@ test("leave room works even while reconnecting and ignores a late server respons
     globalThis.fetch = previousFetch;
     window.history = previousHistory;
     window.location = previousLocation;
+  }
+});
+
+test("race countdown locks drawing, submission and shots, then releases them at the shared start time", async () => {
+  entries.clear();
+  const room = duelFixture("race");
+  let actions = 0;
+  const props = {
+    ...duelProps(room),
+    room: duel.roomView(room, 0, room.startedAt - 3000),
+    action: async () => {
+      actions++;
+    },
+  };
+  const rendered = mount(DuelBoard, props);
+  try {
+    assert.ok(rendered.root.findByProps({ "aria-label": "Race starts in 3" }));
+    assert.equal(duelBoard(rendered).props.newLaserLocked, true);
+    assert.equal(duelBoard(rendered).props.locked, true);
+    assert.equal(button(rendered, "Submit solution").props.disabled, true);
+    act(() => duelBoard(rendered).props.onCell(0, 0));
+    await act(async () => duelBoard(rendered).props.onLaser("top", 0));
+    assert.equal(actions, 0);
+    assert.equal(duelBoard(rendered).props.guess[0][0], null);
+    act(() =>
+      rendered.update(
+        React.createElement(DuelBoard, {
+          ...props,
+          room: duel.roomView(room, 0, room.startedAt),
+        }),
+      ),
+    );
+    assert.equal(duelBoard(rendered).props.newLaserLocked, false);
+    assert.equal(button(rendered, "Submit solution").props.disabled, false);
+    await act(async () => duelBoard(rendered).props.onLaser("top", 0));
+    assert.equal(actions, 1);
+  } finally {
+    act(() => rendered.unmount());
+  }
+});
+
+function eightPlayerFixture() {
+  const room = duel.createRoom(
+    "2468",
+    { id: "group-host", name: "Robin" },
+    true,
+    { mode: "random" },
+    1000,
+  );
+  for (let i = 1; i < 8; i++)
+    duel.joinRoom(room, { id: `group-member-${i}`, name: `Player ${i}` }, true);
+  duel.applyAction(room, 0, { type: "start" }, 2000);
+  return room;
+}
+test("eight-player random race works for the last guest and reviews each player’s drawing and laser log", async () => {
+  entries.clear();
+  const room = eightPlayerFixture();
+  for (let i = 0; i < 8; i++)
+    duel.applyAction(
+      room,
+      i,
+      { type: "laser", side: "left", idx: i % 5 },
+      5000,
+    );
+  const props = duelProps(room, 7);
+  let actions = 0;
+  const rendered = mount(DuelBoard, {
+    ...props,
+    action: async () => {
+      actions++;
+    },
+  });
+  try {
+    assert.equal(duelBoard(rendered).props.locked, false);
+    assert.equal(duelBoard(rendered).props.revealed, null);
+    assert.equal(
+      rendered.root.findAllByProps({ "aria-label": "Choose player attempt" })
+        .length,
+      0,
+    );
+    assert.equal(duelBoard(rendered).props.queries.length, 1);
+    assert.equal(duelBoard(rendered).props.queries[0].player, 7);
+    await act(async () => duelBoard(rendered).props.onLaser("top", 0));
+    assert.equal(actions, 1);
+    for (let i = 0; i < 8; i++)
+      duel.applyAction(
+        room,
+        i,
+        {
+          type: "submit",
+          drawing:
+            i === 3
+              ? { guess: emptyBoard(7, 5), edges: { "v-0-3": "red" } }
+              : solutionDrawing(room.players[i].placed, 7, 5),
+        },
+        125000 + i * 1000,
+      );
+    act(() =>
+      rendered.update(React.createElement(DuelBoard, duelProps(room, 7))),
+    );
+    act(() => rendered.root.findByType("dialog").props.onCancel());
+    const buttons = rendered.root
+      .findByProps({ "aria-label": "Choose player attempt" })
+      .findAllByType("button");
+    assert.equal(buttons.length, 8);
+    act(() => buttons[3].props.onClick());
+    assert.deepEqual(duelBoard(rendered).props.edges, { "v-0-3": "red" });
+    const logs = rendered.root.findAll(
+      (n) => typeof n.type === "function" && n.type.name === "QueryLog",
+    );
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].props.title, "Player 3");
+    assert.ok(logs[0].props.history.every((q) => q.player === 3));
+    act(() => logs[0].props.onSelect(0));
+    assert.equal(duelBoard(rendered).props.activeLaser.side, "left");
+    assert.equal(duelBoard(rendered).props.activeLaser.idx, 3);
+    assert.equal(duelBoard(rendered).props.queries[0].player, 3);
+    act(() => buttons[7].props.onClick());
+    assert.equal(duelBoard(rendered).props.queries[0].player, 7);
+    assert.deepEqual(
+      duelBoard(rendered).props.edges,
+      room.players[7].submission.drawing.edges,
+    );
+  } finally {
+    act(() => rendered.unmount());
+  }
+});
+test("group race results rank every player and keep incorrect attempts at zero", () => {
+  const players = Array.from({ length: 8 }, (_, i) => ({
+    name: `Player ${i}`,
+    you: i === 7,
+    playerIndex: i,
+    winner: i === 6,
+    submission: {
+      correct: i !== 0,
+      score: i === 0 ? 0 : i === 6 ? 6000 : 1000,
+      seconds: 120,
+      queries: 10,
+    },
+  }));
+  const rendered = mount(RaceResultDialog, {
+    players,
+    title: "Player 6 wins",
+    won: false,
+    animate: false,
+    onReveal() {},
+    onClose() {},
+    onNext() {},
+    nextLabel: "Rematch",
+  });
+  try {
+    assert.equal(
+      rendered.root.findAllByProps({ role: "progressbar" }).length,
+      8,
+    );
+    assert.equal(text(rendered.root.findAllByType("h3")[0]), "1Player 6");
+    assert.ok(text(rendered.root).includes("Incorrect · 0 points"));
+    assert.ok(text(rendered.root).includes("You"));
+  } finally {
+    act(() => rendered.unmount());
   }
 });

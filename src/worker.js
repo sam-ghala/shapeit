@@ -173,7 +173,7 @@ export class GameService {
               ? "read"
               : "write";
     const key = `${request.headers.get("X-Rate-Key")}:${category}`;
-    const limit = { create: 6, join: 20, read: 180, write: 120, draft: 400 }[
+    const limit = { create: 6, join: 30, read: 600, write: 480, draft: 400 }[
       category
     ];
     const current = [
@@ -293,7 +293,7 @@ export class GameService {
       joined = false;
     if (match[2] === "join" && request.method === "POST") {
       token = joinRoom(room, body.profile, body.mobile);
-      index = 1;
+      index = room.players.length - 1;
       joined = true;
     } else if (index < 0)
       return json(
@@ -331,7 +331,7 @@ export class GameService {
             mode: "duel",
             size: room.size,
             result:
-              room.winner === "draw"
+              room.winner === "draw" && (room.winners || [0, 1]).includes(i)
                 ? "draw"
                 : room.winner === i
                   ? "won"
@@ -353,7 +353,8 @@ export class GameService {
       room.expiresAt,
       room.code,
     );
-    if (body.type === "draft") return json({ ok: true });
+    index = playerIndex(room, token);
+    if (body.type === "draft" || index < 0) return json({ ok: true });
     return json({
       room: roomView(room, index, now),
       ...(joined ? { token } : {}),

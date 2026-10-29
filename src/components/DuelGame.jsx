@@ -153,10 +153,10 @@ export function DuelGame({
     writeJSON("shapeit:room", null);
     window.history.replaceState(null, "", "/");
   };
-  const leave = () => {
+  const leave = (goHome = true) => {
     const current = credentials;
     reset();
-    onHome();
+    if (goHome) onHome();
     if (current)
       void api(`/api/rooms/${current.code}/action`, current.token, {
         type: "leave",
@@ -167,10 +167,19 @@ export function DuelGame({
     <main className="app-shell game-shell duel-shell">
       <header className="topbar">
         <MenuButton onClick={onHome} />
-        <h1>1 vs 1</h1>
+        <h1>
+          {room?.settings.mode === "random" ? (
+            <>
+              <span className="race-title-full">Random race</span>
+              <span className="race-title-short">Race</span>
+            </>
+          ) : (
+            "Multiplayer"
+          )}
+        </h1>
         <div className="header-actions">
           {(credentials || room || busy) && (
-            <button className="leave-room" onClick={leave}>
+            <button className="leave-room" onClick={() => leave()}>
               Leave room
             </button>
           )}
@@ -205,7 +214,7 @@ export function DuelGame({
         <div className="duel-entry">
           <section className="card">
             <div className="mode-symbol blue">↗</div>
-            <h2>Challenge a friend</h2>
+            <h2>Play with friends</h2>
             <button
               className="primary"
               onClick={() => enter(false)}
@@ -247,7 +256,10 @@ export function DuelGame({
       {room?.phase === "lobby" && (
         <div className="lobby-grid">
           <section className="card">
-            <h2>Your private room</h2>
+            <h2>
+              Your room · {room.players.length}/
+              {room.settings.mode === "random" ? 8 : 2}
+            </h2>
             <p className="large-code">{room.code}</p>
             <div className="button-row">
               <button
@@ -305,14 +317,11 @@ export function DuelGame({
                     "Alternate lasers. One final attempt each.",
                   ],
                   ["race", "Score race", "Create boards. Race for points."],
-                  [
-                    "random",
-                    "Random race",
-                    "Same random board. Start straight away.",
-                  ],
+                  ["random", "Random race", "2–8 players. Same random board."],
                 ].map(([mode, title, help]) => (
                   <button
                     key={mode}
+                    disabled={room.players.length > 2 && mode !== "random"}
                     aria-pressed={(room.settings.mode || "turns") === mode}
                     onClick={() =>
                       action({
@@ -339,7 +348,7 @@ export function DuelGame({
             {room.you === 0 ? (
               <button
                 className="primary"
-                disabled={room.players.length !== 2 || busy}
+                disabled={room.players.length < 2 || busy}
                 onClick={() => action({ type: "start" })}
               >
                 {room.settings.mode === "random"
@@ -347,9 +356,7 @@ export function DuelGame({
                   : "Start placing"}
               </button>
             ) : (
-              <p className="notice">
-                Your host starts the game when you're both here.
-              </p>
+              <p className="notice">Waiting for the host to start.</p>
             )}
           </section>
         </div>
@@ -373,7 +380,7 @@ export function DuelGame({
           syncDrawing={syncDrawing}
           busy={busy}
           effects={effects}
-          onNewRoom={reset}
+          onNewRoom={() => leave(false)}
         />
       )}
     </main>
@@ -389,7 +396,7 @@ export function DuelBoard({
 }) {
   const { cols, rows } = SIZES[room.size],
     me = room.players[room.you],
-    opponent = room.players[1 - room.you];
+    opponent = room.players.find((_, i) => i !== room.you) || me;
   const [orientations, setOrientations] = useState({});
   const [replay, setReplay] = useState(null);
   const [selectedPiece, setSelectedPiece] = useState(me.pieces[0]?.id),
@@ -398,6 +405,7 @@ export function DuelBoard({
     [selectedQuery, setSelectedQuery] = useState(null),
     [view, setView] = useState("drawing"),
     [owner, setOwner] = useState(1 - room.you),
+    [reviewPlayer, setReviewPlayer] = useState(room.you),
     [resultOpen, setResultOpen] = useState(false),
     [reviewMode, setReviewMode] = useState("overlay"),
     [selectionVersion, setSelectionVersion] = useState(0),
@@ -416,7 +424,9 @@ export function DuelBoard({
   const [color, setColor] = useState(opponent.pieces[0]?.color || "red");
   const offset = useRef(room.serverNow - Date.now());
   useEffect(() => {
-    offset.current = room.serverNow - Date.now();
+    const now = Date.now();
+    offset.current = room.serverNow - now;
+    setClock(now);
   }, [room.serverNow]);
   useEffect(() => {
     const id = setInterval(() => setClock(Date.now()), 250);
@@ -433,6 +443,21 @@ export function DuelBoard({
     : null;
   const race = ["race", "random"].includes(room.settings.mode);
   const randomRace = room.settings.mode === "random";
+  const groupRace = randomRace && room.players.length > 2;
+  const startCountdown =
+    race && !me.submitted && room.phase === "playing" && room.startedAt
+      ? Math.max(0, Math.ceil((room.startedAt - clock - offset.current) / 1000))
+      : 0;
+  const startVisible =
+    race &&
+    room.phase === "playing" &&
+    room.startedAt &&
+    clock + offset.current < room.startedAt + 650;
+  const lastCount = useRef(startCountdown);
+  useEffect(() => {
+    if (lastCount.current > 0 && startCountdown === 0) playSound("turn");
+    lastCount.current = startCountdown;
+  }, [startCountdown]);
   const [resultRevealed, setResultRevealed] = useState(false);
   const revealResult = useCallback(() => setResultRevealed(true), []);
   const done = room.phase === "finished",
@@ -440,6 +465,8 @@ export function DuelBoard({
   useEffect(() => {
     if (done) {
       setView("solution");
+      setReplay(null);
+      setSelectedQuery(null);
       setResultOpen(true);
     }
   }, [done]);
@@ -485,12 +512,13 @@ export function DuelBoard({
     setOrientations((value) => ({ ...value, [selectedPiece]: next }));
   };
   const expired = room.phase === "final" && countdown === 0;
-  const canDraw = !done && !setup && !me.submitted && !expired;
+  const canDraw =
+    !done && !setup && !me.submitted && !expired && startCountdown === 0;
   const sendDraft = useRef(null);
   const latestDrawing = useRef(drawing);
   latestDrawing.current = drawing;
   useEffect(() => {
-    if (!canDraw || !syncDrawing) return;
+    if (!canDraw || !syncDrawing || race) return;
     const controller = new AbortController();
     let sent = "",
       sending = false,
@@ -513,7 +541,7 @@ export function DuelBoard({
       clearInterval(timer);
       controller.abort();
     };
-  }, [canDraw, room.id, syncDrawing]);
+  }, [canDraw, room.id, syncDrawing, race]);
   useEffect(() => {
     void sendDraft.current?.();
   }, [drawing, canDraw]);
@@ -526,6 +554,7 @@ export function DuelBoard({
   }, [me.submitted, done, race]);
   const myTurn =
     room.phase === "playing" &&
+    startCountdown === 0 &&
     !me.submitted &&
     (race || room.turn === room.you);
   const lastTurn = useRef(myTurn);
@@ -563,6 +592,7 @@ export function DuelBoard({
     });
   };
   const canSubmit =
+    startCountdown === 0 &&
     !me.submitted &&
     !expired &&
     (room.phase === "final" ||
@@ -570,7 +600,7 @@ export function DuelBoard({
         (race || room.turn === room.you || room.lastActor === room.you)));
   const handleLaser = async (side, idx) => {
     const ownBoard = !done && view === "mine";
-    const shooter = done ? 1 - owner : ownBoard ? 1 - room.you : room.you;
+    const shooter = done ? author : ownBoard ? 1 - room.you : room.you;
     const existing = room.queries.findIndex(
       (q) =>
         q.player === shooter &&
@@ -585,7 +615,7 @@ export function DuelBoard({
       setReplay({
         ...fireLaser(
           boardFromPlaced(
-            room.players[done ? owner : room.you].placed,
+            room.players[done ? boardOwner : room.you].placed,
             cols,
             rows,
           ),
@@ -622,16 +652,34 @@ export function DuelBoard({
       setSelectionVersion((v) => v + 1);
     }
   };
+  const winners =
+    room.winners ||
+    (room.winner === "draw"
+      ? [0, 1]
+      : typeof room.winner === "number"
+        ? [room.winner]
+        : []);
   const resultTitle =
-    room.winner === "draw"
-      ? "Draw!"
-      : room.winner === "none"
-        ? "Both missed"
+    room.winner === "none"
+      ? groupRace
+        ? "No correct solutions"
+        : "Both missed"
+      : room.winner === "draw"
+        ? groupRace
+          ? winners.includes(room.you)
+            ? "Tied for first!"
+            : "Tie for first"
+          : "Draw!"
         : room.winner === room.you
           ? "You won!"
-          : `${opponent.name} wins`;
+          : `${room.players[room.winner]?.name || opponent.name} wins`;
+  const activePlayers = room.players.flatMap((p, index) =>
+    p.left ? [] : [index],
+  );
+  const rematchDisabled =
+    busy || room.rematch?.includes(room.you) || activePlayers.length < 2;
   const rematchLabel = room.rematch?.includes(room.you)
-    ? "Waiting for rematch…"
+    ? `Waiting · ${room.rematch.filter((i) => !room.players[i]?.left).length}/${activePlayers.length}`
     : room.rematch?.length
       ? "Accept rematch"
       : "Rematch";
@@ -647,24 +695,45 @@ export function DuelBoard({
       if (e.name !== "AbortError") setShareMessage("Sharing is unavailable.");
     }
   };
-  const boardOwner = done ? owner : view === "mine" ? room.you : 1 - room.you;
-  const author = 1 - boardOwner;
+  const boardOwner = race
+    ? randomRace
+      ? room.you
+      : 1 - reviewPlayer
+    : done
+      ? owner
+      : view === "mine"
+        ? room.you
+        : 1 - room.you;
+  const author = race ? (done ? reviewPlayer : room.you) : 1 - boardOwner;
   const reviewedDrawing = done
     ? room.players[author].submission?.drawing
-    : view === "mine"
+    : !race && view === "mine"
       ? opponent.draft
       : drawing;
-  const ownBoard = boardOwner === room.you;
+  const ownBoard = !race && boardOwner === room.you;
+  const drawingName =
+    author === room.you ? "Your" : `${room.players[author].name}'s`;
+  const solutionName = randomRace
+    ? "Shared"
+    : boardOwner === room.you
+      ? "Your"
+      : `${room.players[boardOwner].name}'s`;
   const changeBoard = (index) => {
     setOwner(index);
     setView(index === room.you ? "mine" : "drawing");
     setReplay(null);
     setSelectedQuery(null);
   };
+  const changeAttempt = (index) => {
+    setReviewPlayer(index);
+    setReplay(null);
+    setSelectedQuery(null);
+  };
   const selectQuery = (index) => {
     const q = room.queries[index],
-      target = 1 - q.player;
-    changeBoard(target);
+      target = randomRace ? room.you : 1 - q.player;
+    if (done && race) changeAttempt(q.player);
+    else changeBoard(target);
     setSelectedQuery(index);
     setSelectionVersion((v) => v + 1);
     if (done || target === room.you)
@@ -693,26 +762,38 @@ export function DuelBoard({
       ? race && !resultRevealed
         ? "Round complete"
         : resultTitle
-      : me.submitted
-        ? `${opponent.name} is finishing…`
-        : room.phase === "final"
-          ? expired
-            ? "Time’s up · checking your drawing"
-            : "Final attempt · no more lasers"
-          : race
-            ? randomRace
-              ? "Random race"
-              : "Score race"
-            : myTurn
-              ? "Your turn"
-              : `${opponent.name}'s turn`;
+      : startCountdown > 0
+        ? "Get ready"
+        : me.submitted
+          ? groupRace
+            ? `${room.players.filter((p) => !p.submitted).length} players finishing…`
+            : `${opponent.name} is finishing…`
+          : room.phase === "final"
+            ? expired
+              ? "Time’s up · checking your drawing"
+              : "Final attempt · no more lasers"
+            : race
+              ? randomRace
+                ? "Random race"
+                : "Score race"
+              : myTurn
+                ? "Your turn"
+                : `${opponent.name}'s turn`;
   return (
     <>
       {done && resultOpen && race && (
         <RaceResultDialog
-          players={[me, opponent]}
+          players={[
+            room.you,
+            ...room.players.map((_, i) => i).filter((i) => i !== room.you),
+          ].map((i) => ({
+            ...room.players[i],
+            you: i === room.you,
+            playerIndex: i,
+            winner: winners.includes(i),
+          }))}
           title={resultTitle}
-          won={room.winner === room.you || room.winner === "draw"}
+          won={winners.includes(room.you)}
           onReveal={revealResult}
           onClose={() => {
             revealResult();
@@ -720,7 +801,7 @@ export function DuelBoard({
           }}
           onNext={() => action({ type: "rematch" })}
           nextLabel={rematchLabel}
-          nextDisabled={busy || room.rematch?.includes(room.you)}
+          nextDisabled={rematchDisabled}
         />
       )}
       {done && resultOpen && !race && (
@@ -738,26 +819,43 @@ export function DuelBoard({
           onClose={() => setResultOpen(false)}
           onNext={() => action({ type: "rematch" })}
           nextLabel={rematchLabel}
-          nextDisabled={busy || room.rematch?.includes(room.you)}
+          nextDisabled={rematchDisabled}
           onShare={shareResult}
           message={shareMessage}
         />
       )}
-      <div className="duel-scoreline" aria-label="Room score">
-        <span>{me.name}</span>
-        <strong>
-          {(room.wins?.[room.you] ?? 0) -
-            (done && race && !resultRevealed && room.winner === room.you
-              ? 1
-              : 0)}{" "}
-          :{" "}
-          {(room.wins?.[1 - room.you] ?? 0) -
-            (done && race && !resultRevealed && room.winner === 1 - room.you
-              ? 1
-              : 0)}
-        </strong>
-        <span>{opponent.name}</span>
-      </div>
+      {groupRace ? (
+        <div className="race-roster" aria-label="Players">
+          {room.players.map((p, i) => (
+            <span key={i} className={i === room.you ? "is-you" : ""}>
+              <strong>{i === room.you ? "You" : p.name}</strong>
+              <small>
+                {p.left
+                  ? "Left"
+                  : p.submitted && !done
+                    ? "Finished"
+                    : `${(room.wins?.[i] || 0) - (done && !resultRevealed && room.winner === i ? 1 : 0)} wins`}
+              </small>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="duel-scoreline" aria-label="Room score">
+          <span>{me.name}</span>
+          <strong>
+            {(room.wins?.[room.you] ?? 0) -
+              (done && race && !resultRevealed && room.winner === room.you
+                ? 1
+                : 0)}{" "}
+            :{" "}
+            {(room.wins?.[1 - room.you] ?? 0) -
+              (done && race && !resultRevealed && room.winner === 1 - room.you
+                ? 1
+                : 0)}
+          </strong>
+          <span>{opponent.name}</span>
+        </div>
+      )}
       <div
         className={`session-bar turn-banner ${myTurn || (room.phase === "final" && !me.submitted) ? "your-turn" : "their-turn"}`}
         role="status"
@@ -886,7 +984,31 @@ export function DuelBoard({
         </>
       ) : (
         <>
-          {(!race || done) && (
+          {done && race && (
+            <div
+              className="board-switch race-review-switch"
+              role="group"
+              aria-label="Choose player attempt"
+            >
+              {room.players.map((p, i) => (
+                <button
+                  key={i}
+                  aria-pressed={reviewPlayer === i}
+                  onClick={() => changeAttempt(i)}
+                >
+                  <strong>
+                    {i === room.you ? "Your attempt" : `${p.name}'s attempt`}
+                  </strong>
+                  {!randomRace && (
+                    <small>
+                      On {i === room.you ? `${opponent.name}'s` : "your"} board
+                    </small>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {!race && (
             <div
               className="board-switch"
               role="group"
@@ -919,7 +1041,21 @@ export function DuelBoard({
           <div
             className={`play-layout duel-play-layout ${race && !done ? "race-active" : ""}`}
           >
-            <section className="board-panel">
+            <section className="board-panel race-board-panel">
+              {startVisible && (
+                <div
+                  className="race-start-overlay"
+                  role="status"
+                  aria-label={
+                    startCountdown > 0
+                      ? `Race starts in ${startCountdown}`
+                      : "Go!"
+                  }
+                  key={startCountdown}
+                >
+                  <strong>{startCountdown || "Go!"}</strong>
+                </div>
+              )}
               <GameBoard
                 cols={cols}
                 rows={rows}
@@ -977,12 +1113,7 @@ export function DuelBoard({
                       {[
                         ["solution", "Solution"],
                         ["overlay", "Overlay"],
-                        [
-                          "drawing",
-                          ownBoard
-                            ? `${opponent.name}'s drawing`
-                            : "Your drawing",
-                        ],
+                        ["drawing", `${drawingName} drawing`],
                       ].map(([value, label]) => (
                         <button
                           key={value}
@@ -995,10 +1126,10 @@ export function DuelBoard({
                     </div>
                     <p className="comparison-legend">
                       {reviewMode === "overlay"
-                        ? `Filled: ${randomRace ? "shared" : ownBoard ? "your" : opponent.name + "’s"} board · Dashed: ${ownBoard ? opponent.name + "’s" : "your"} drawing`
+                        ? `Filled: ${solutionName} board · Dashed: ${drawingName} drawing`
                         : reviewMode === "solution"
-                          ? `${randomRace ? "Shared" : ownBoard ? "Your" : opponent.name + "’s"} original board`
-                          : `${ownBoard ? opponent.name + "’s" : "Your"} submitted drawing`}
+                          ? `${solutionName} original board`
+                          : `${drawingName} submitted drawing`}
                     </p>
                   </>
                 )}
@@ -1044,48 +1175,50 @@ export function DuelBoard({
                 )}
               </aside>
               <div className={`duel-logs ${race ? "single-log" : ""}`}>
-                {(race ? [room.you] : [room.you, 1 - room.you]).map(
-                  (shooter) => {
-                    const queries = room.queries
-                      .map((q, index) => ({ ...q, index }))
-                      .filter((q) => q.player === shooter);
-                    return (
-                      <QueryLog
-                        key={shooter}
-                        title={shooter === room.you ? "You" : opponent.name}
-                        history={queries}
-                        cols={cols}
-                        rows={rows}
-                        selected={
-                          queries.some((q) => q.index === selectedQuery)
-                            ? queries.findIndex(
-                                (q) => q.index === selectedQuery,
-                              )
-                            : null
-                        }
-                        selectionVersion={selectionVersion}
-                        onSelect={(i) => selectQuery(queries[i].index)}
-                      />
-                    );
-                  },
-                )}
+                {(race
+                  ? [done ? author : room.you]
+                  : [room.you, 1 - room.you]
+                ).map((shooter) => {
+                  const queries = room.queries
+                    .map((q, index) => ({ ...q, index }))
+                    .filter((q) => q.player === shooter);
+                  return (
+                    <QueryLog
+                      key={shooter}
+                      title={
+                        shooter === room.you
+                          ? "You"
+                          : room.players[shooter].name
+                      }
+                      history={queries}
+                      cols={cols}
+                      rows={rows}
+                      selected={
+                        queries.some((q) => q.index === selectedQuery)
+                          ? queries.findIndex((q) => q.index === selectedQuery)
+                          : null
+                      }
+                      selectionVersion={selectionVersion}
+                      onSelect={(i) => selectQuery(queries[i].index)}
+                    />
+                  );
+                })}
               </div>
               {done && (
                 <div className="secondary-tools duel-result-tools">
                   {race && resultRevealed && (
                     <div className="round-points">
-                      <span>
-                        You <strong>{me.submission?.score ?? 0}</strong>
-                      </span>
-                      <span>
-                        {opponent.name}{" "}
-                        <strong>{opponent.submission?.score ?? 0}</strong>
-                      </span>
+                      {room.players.map((p, i) => (
+                        <span key={i}>
+                          {i === room.you ? "You" : p.name}{" "}
+                          <strong>{p.submission?.score ?? 0}</strong>
+                        </span>
+                      ))}
                     </div>
                   )}
                   <button
                     className="primary next-board"
-                    disabled={busy || room.rematch?.includes(room.you)}
+                    disabled={rematchDisabled}
                     onClick={() => action({ type: "rematch" })}
                   >
                     {rematchLabel} →

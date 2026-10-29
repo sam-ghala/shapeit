@@ -182,7 +182,14 @@ const raceBoards = setupRace.players.map(
   (p, i) => generatePuzzle(`http-race:${i}`, p.pieces, 7, 5).placed,
 );
 await raceAction(0, { type: "ready", placed: raceBoards[0] });
-await raceAction(1, { type: "ready", placed: raceBoards[1] });
+const raceCountdown = (
+  await raceAction(1, { type: "ready", placed: raceBoards[1] })
+).room;
+assert.ok(raceCountdown.startedAt > raceCountdown.serverNow);
+await raceAction(0, { type: "laser", side: "top", idx: 0 }, 400);
+await new Promise((resolve) =>
+  setTimeout(resolve, Math.max(0, raceCountdown.startedAt - Date.now() + 30)),
+);
 await raceAction(0, { type: "laser", side: "top", idx: 0 });
 await raceAction(1, { type: "laser", side: "top", idx: 0 });
 const raceDraft = { guess: emptyBoard(7, 5), edges: { "h-0-0": "red" } };
@@ -255,6 +262,9 @@ await randomAction(0, {
 const randomStart = (await randomAction(0, { type: "start" })).room;
 assert.equal(randomStart.phase, "playing");
 assert.ok(randomStart.players.every((p) => p.ready && p.placed === undefined));
+await new Promise((resolve) =>
+  setTimeout(resolve, Math.max(0, randomStart.startedAt - Date.now() + 30)),
+);
 const randomShots = [];
 for (let i = 0; i < 2; i++) {
   const v = (await randomAction(i, { type: "laser", side: "top", idx: 0 }))
@@ -284,6 +294,92 @@ assert.notEqual(randomRematch.id, randomStart.id);
 assert.ok(randomRematch.players.every((p) => p.placed === undefined));
 
 // Real deadline: a saved correct final drawing is submitted automatically.
+// Eight players share one random puzzle, with private clues until everyone finishes.
+const groupCreated = await request("/api/rooms", {
+  body: {
+    profile: { id: crypto.randomUUID(), name: "Group host" },
+    mobile: false,
+  },
+  status: 201,
+});
+const groupCode = groupCreated.room.code,
+  groupTokens = [groupCreated.token];
+const groupAction = (i, body, status = 200) =>
+  request(`/api/rooms/${groupCode}/action`, {
+    token: groupTokens[i],
+    body,
+    status,
+  });
+await groupAction(0, { type: "settings", settings: { mode: "random" } });
+for (let i = 1; i < 8; i++) {
+  const member = await request(`/api/rooms/${groupCode}/join`, {
+    body: {
+      profile: { id: crypto.randomUUID(), name: `Guest ${i}` },
+      mobile: i === 7,
+    },
+  });
+  groupTokens.push(member.token);
+  assert.equal(member.room.you, i);
+  assert.equal(member.room.players.length, i + 1);
+}
+await request(`/api/rooms/${groupCode}/join`, {
+  body: { profile: { id: crypto.randomUUID(), name: "Ninth" }, mobile: false },
+  status: 400,
+});
+await groupAction(0, { type: "settings", settings: { mode: "turns" } }, 400);
+const groupStart = (await groupAction(0, { type: "start" })).room;
+assert.equal(groupStart.size, "compact");
+assert.ok(groupStart.players.every((p) => p.placed === undefined));
+assert.equal(groupStart.startedAt - groupStart.serverNow, 3000);
+await groupAction(7, { type: "laser", side: "top", idx: 0 }, 400);
+await groupAction(
+  7,
+  { type: "submit", drawing: { guess: emptyBoard(7, 5), edges: {} } },
+  400,
+);
+await new Promise((resolve) =>
+  setTimeout(resolve, Math.max(0, groupStart.startedAt - Date.now() + 30)),
+);
+for (let i = 0; i < 8; i++) {
+  const shot = (await groupAction(i, { type: "laser", side: "top", idx: 0 }))
+    .room;
+  assert.equal(shot.queries.length, 1);
+  assert.equal(shot.queries[0].player, i);
+}
+await groupAction(3, { type: "leave" });
+assert.equal(
+  (await request(`/api/rooms/${groupCode}`, { token: groupTokens[7] })).room
+    .phase,
+  "playing",
+);
+let groupEnd;
+for (const i of [0, 1, 2, 4, 5, 6, 7])
+  groupEnd = (
+    await groupAction(i, {
+      type: "submit",
+      drawing: { guess: emptyBoard(7, 5), edges: { [`v-0-${i}`]: "red" } },
+    })
+  ).room;
+assert.equal(groupEnd.phase, "finished");
+assert.equal(groupEnd.winner, "none");
+assert.equal(groupEnd.queries.length, 8);
+assert.ok(
+  groupEnd.players.every(
+    (p) =>
+      JSON.stringify(p.placed) === JSON.stringify(groupEnd.players[0].placed),
+  ),
+);
+assert.equal(groupEnd.players[7].submission.drawing.edges["v-0-7"], "red");
+assert.equal(groupEnd.players[3].left, true);
+assert.equal(groupEnd.players[3].submission.score, 0);
+for (const i of [0, 1, 2, 4, 5, 6]) await groupAction(i, { type: "rematch" });
+const groupRematch = (await groupAction(7, { type: "rematch" })).room;
+assert.equal(groupRematch.phase, "playing");
+assert.equal(groupRematch.players.length, 7);
+assert.equal(groupRematch.you, 6);
+assert.ok(groupRematch.startedAt > groupRematch.serverNow);
+assert.deepEqual(groupRematch.wins, Array(7).fill(0));
+
 const timeoutCreated = await request("/api/rooms", {
   body: {
     profile: { id: crypto.randomUUID(), name: "Timeout host" },

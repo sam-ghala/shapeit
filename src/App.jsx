@@ -198,7 +198,7 @@ export default function ShapeIt() {
           <span className="mode-icon" aria-hidden="true">
             ⚔
           </span>
-          <strong>1 vs 1</strong>
+          <strong>Multiplayer</strong>
           <span aria-hidden="true">▶</span>
         </button>
       </nav>

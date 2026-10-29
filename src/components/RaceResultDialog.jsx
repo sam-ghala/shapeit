@@ -17,6 +17,16 @@ export function RaceResultDialog({
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const [progress, setProgress] = useState(animate && !reduced ? 0 : 1);
   const complete = progress === 1;
+  const group = players.length > 2;
+  const entries = players.map((player, index) => ({
+    ...player,
+    you: player.you ?? index === 0,
+    originalIndex: index,
+  }));
+  if (group && complete)
+    entries.sort(
+      (a, b) => (b.submission?.score || 0) - (a.submission?.score || 0),
+    );
   useEffect(() => {
     if (!animate || reduced) {
       setProgress(1);
@@ -56,25 +66,43 @@ export function RaceResultDialog({
     <Dialog
       title={complete ? title : "Counting points…"}
       onClose={onClose}
-      className={`race-result-dialog ${complete && won ? "success" : ""}`}
+      className={`race-result-dialog ${group ? "group-race-result" : ""} ${complete && won ? "success" : ""}`}
     >
       <div className="race-meters">
-        {players.map((player, index) => {
+        {entries.map((player) => {
           const score = player.submission?.score || 0,
-            value = Math.round(score * progress);
+            value = Math.round(score * progress),
+            rank = player.submission?.correct
+              ? 1 +
+                players.filter((p) => (p.submission?.score || 0) > score).length
+              : null;
           return (
-            <section className={`race-meter-card player-${index}`} key={index}>
-              <h3>{index === 0 ? "You" : player.name}</h3>
+            <section
+              className={`race-meter-card player-${player.you ? 0 : 1} ${complete && player.winner ? "race-winner" : ""}`}
+              key={player.playerIndex ?? player.originalIndex}
+            >
+              <h3>
+                {group && complete && (
+                  <span className="race-rank">{rank || "–"}</span>
+                )}
+                {player.you ? "You" : player.name}
+              </h3>
               <strong className="race-points">{value.toLocaleString()}</strong>
               <div
                 className="race-meter-track"
                 role="progressbar"
-                aria-label={`${index === 0 ? "Your" : player.name + "’s"} score`}
+                aria-label={`${player.you ? "Your" : player.name + "’s"} score`}
                 aria-valuenow={value}
                 aria-valuemin={0}
                 aria-valuemax={10000}
               >
-                <div style={{ height: `${value / 100}%` }} />
+                <div
+                  style={
+                    group
+                      ? { width: `${value / 100}%` }
+                      : { height: `${value / 100}%` }
+                  }
+                />
               </div>
               <div className="race-stats">
                 <span>{player.submission?.queries ?? 0} lasers</span>
@@ -90,7 +118,9 @@ export function RaceResultDialog({
                 {complete
                   ? player.submission?.correct
                     ? "Correct"
-                    : "Incorrect · 0 points"
+                    : player.left
+                      ? "Left · 0 points"
+                      : "Incorrect · 0 points"
                   : "points"}
               </p>
             </section>

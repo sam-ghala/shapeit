@@ -7,6 +7,8 @@ import {
   advanceRoom,
   roomView,
   FINAL_MS,
+  RACE_COUNTDOWN_MS,
+  MAX_RACE_PLAYERS,
 } from "../src/server/duel.js";
 import {
   SIZES,
@@ -41,7 +43,11 @@ function playing() {
 }
 function correct(r, player) {
   const { cols, rows } = SIZES[r.size];
-  return solutionDrawing(r.players[1 - player].placed, cols, rows);
+  return solutionDrawing(
+    r.players[r.settings.mode === "random" ? player : 1 - player].placed,
+    cols,
+    rows,
+  );
 }
 test("two computers use classic; either phone switches both to compact", () => {
   assert.equal(setup().size, "classic");
@@ -281,9 +287,9 @@ function raceRoom(extras = false) {
 test("host selects score race; both players act independently and only server time and clues count", async () => {
   const { calcScore } = await import("../src/game/engine.js");
   const r = raceRoom(true);
-  assert.equal(roomView(r, 0, 3000).startedAt, 3000);
-  applyAction(r, 1 - r.turn, { type: "laser", side: "top", idx: 0 }, 4000);
-  applyAction(r, r.turn, { type: "laser", side: "top", idx: 0 }, 4001);
+  assert.equal(roomView(r, 0, 3000).startedAt, 6000);
+  applyAction(r, 1 - r.turn, { type: "laser", side: "top", idx: 0 }, 7000);
+  applyAction(r, r.turn, { type: "laser", side: "top", idx: 0 }, 7001);
   applyAction(
     r,
     0,
@@ -292,7 +298,7 @@ test("host selects score race; both players act independently and only server ti
   );
   assert.equal(r.phase, "playing");
   assert.equal(r.deadline, null);
-  assert.equal(r.players[0].submission.score, calcScore(120, 1, true));
+  assert.equal(r.players[0].submission.score, calcScore(117, 1, true));
   assert.equal(roomView(r, 1).players[0].submission, undefined);
   assert.equal(roomView(r, 0).players[0].submittedAt, 123000);
   assert.throws(() =>
@@ -440,22 +446,22 @@ test("both race modes filter opponent logs, layouts and drafts even after first 
       applyAction(r, 0, { type: "start" }, 3000);
     }
     for (let i = 0; i < 2; i++)
-      applyAction(r, i, { type: "laser", side: "top", idx: 0 }, 4000);
-    applyAction(r, 1, { type: "draft", drawing: correct(r, 1) }, 4500);
+      applyAction(r, i, { type: "laser", side: "top", idx: 0 }, 7000);
+    applyAction(r, 1, { type: "draft", drawing: correct(r, 1) }, 7500);
     for (let i = 0; i < 2; i++) {
-      const v = roomView(r, i, 4500);
+      const v = roomView(r, i, 7500);
       assert.equal(v.queries.length, 1);
       assert.equal(v.queries[0].player, i);
       assert.ok(
         v.players.every((p) => p.placed === undefined && p.draft === undefined),
       );
     }
-    applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 5000);
+    applyAction(r, 0, { type: "submit", drawing: correct(r, 0) }, 8000);
     assert.equal(roomView(r, 0).players[1].draft, undefined);
     assert.equal(roomView(r, 0).players[1].placed, undefined);
-    applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 6000);
+    applyAction(r, 1, { type: "submit", drawing: correct(r, 1) }, 9000);
     assert.ok(roomView(r, 0).players[1].submission);
-    assert.equal(roomView(r, 0).queries.length, 1);
+    assert.equal(roomView(r, 0).queries.length, 2);
   }
 });
 test("random race skips placement, shares a legal secret board and generates a fresh rematch", () => {
@@ -470,7 +476,7 @@ test("random race skips placement, shares a legal secret board and generates a f
     joinRoom(r, profiles[1], mobile);
     applyAction(r, 0, { type: "start" }, 2000);
     assert.equal(r.phase, "playing");
-    assert.equal(r.startedAt, 2000);
+    assert.equal(r.startedAt, 5000);
     assert.deepEqual(r.players[0].placed, r.players[1].placed);
     assert.ok(r.players.every((p) => p.ready));
     assert.throws(() => applyAction(r, 0, { type: "place", placed: [] }, 2500));
@@ -507,4 +513,170 @@ test("either player can close a room in every phase without awarding an unplayed
     advanceRoom(r, 100000);
     assert.equal(r.phase, "closed");
   }
+});
+
+test("race countdown blocks shots, drawings and submissions, and is excluded from scoring", () => {
+  for (const mode of ["race", "random"]) {
+    const r =
+      mode === "race"
+        ? raceRoom()
+        : createRoom("2468", profiles[0], true, { mode }, 1000);
+    if (mode === "random") {
+      joinRoom(r, profiles[1], false);
+      applyAction(r, 0, { type: "start" }, 3000);
+    }
+    assert.equal(r.startedAt, 3000 + RACE_COUNTDOWN_MS);
+    for (const type of ["laser", "draft", "submit"])
+      assert.throws(
+        () =>
+          applyAction(
+            r,
+            0,
+            { type, side: "top", idx: 0, drawing: correct(r, 0) },
+            r.startedAt - 1,
+          ),
+        /countdown/,
+      );
+    assert.equal(r.players[0].submission, null);
+    assert.equal(r.queries.length, 0);
+    applyAction(r, 0, { type: "laser", side: "top", idx: 0 }, r.startedAt);
+    applyAction(
+      r,
+      0,
+      { type: "submit", drawing: correct(r, 0) },
+      r.startedAt + 120000,
+    );
+    assert.equal(r.players[0].submission.seconds, 120);
+  }
+});
+function groupRoom(count = 8) {
+  const r = createRoom("8642", profiles[0], false, { mode: "random" }, 1000);
+  for (let i = 1; i < count; i++)
+    joinRoom(
+      r,
+      { id: `group-player-${i}`, name: `Player ${i}` },
+      i === count - 1,
+    );
+  return r;
+}
+test("Random race admits eight distinct players and locks membership and mode after start", () => {
+  const r = groupRoom();
+  assert.equal(r.players.length, MAX_RACE_PLAYERS);
+  assert.equal(r.size, "compact");
+  assert.equal(new Set(r.players.map((p) => p.token)).size, 8);
+  assert.deepEqual(r.wins, Array(8).fill(0));
+  assert.throws(() => joinRoom(r, { id: "player-nine", name: "Ninth" }, false));
+  assert.throws(() =>
+    applyAction(r, 0, { type: "settings", settings: { mode: "turns" } }, 2000),
+  );
+  applyAction(r, 0, { type: "start" }, 3000);
+  assert.ok(
+    r.players.every(
+      (p) => JSON.stringify(p.placed) === JSON.stringify(r.players[0].placed),
+    ),
+  );
+  assert.throws(() => joinRoom(r, { id: "late-player", name: "Late" }, false));
+  for (let i = 0; i < 8; i++) {
+    applyAction(r, i, { type: "laser", side: "top", idx: 0 }, 6000);
+    const v = roomView(r, i, 6000);
+    assert.equal(v.you, i);
+    assert.equal(v.queries.length, 1);
+    assert.equal(v.queries[0].player, i);
+    assert.ok(
+      v.players.every(
+        (p) =>
+          p.placed === undefined &&
+          p.submission === undefined &&
+          p.token === undefined,
+      ),
+    );
+  }
+  assert.ok(
+    r.queries.every(
+      (q) => JSON.stringify(q.colors) === JSON.stringify(r.queries[0].colors),
+    ),
+  );
+});
+test("eight-player race compares all scores, reveals all attempts and logs only at the end, and retains wins on rematch", () => {
+  const r = groupRoom();
+  applyAction(r, 0, { type: "start" }, 3000);
+  const original = structuredClone(r.players[0].placed);
+  for (let i = 0; i < 8; i++)
+    applyAction(r, i, { type: "laser", side: "top", idx: 0 }, 6000);
+  // Player 7 is the quickest correct player; submitting them last must not pick a two-player winner.
+  for (let i = 0; i < 8; i++) {
+    applyAction(
+      r,
+      i,
+      {
+        type: "submit",
+        drawing:
+          i === 6 ? { guess: emptyBoard(7, 5), edges: {} } : correct(r, i),
+      },
+      i === 7 ? 66000 : 126000,
+    );
+    if (i < 7) {
+      assert.equal(r.phase, "playing");
+      assert.equal(roomView(r, 0).players[i].submission, undefined);
+      assert.equal(roomView(r, 0).queries.length, 1);
+    }
+  }
+  assert.equal(r.winner, 7);
+  assert.deepEqual(r.winners, [7]);
+  assert.deepEqual(r.wins, [0, 0, 0, 0, 0, 0, 0, 1]);
+  const final = roomView(r, 4);
+  assert.equal(final.queries.length, 8);
+  assert.ok(final.players.every((p) => p.submission && p.placed));
+  assert.equal(final.players[6].submission.score, 0);
+  for (let i = 0; i < 7; i++) applyAction(r, i, { type: "rematch" }, 130000);
+  assert.equal(r.phase, "finished");
+  applyAction(r, 7, { type: "rematch" }, 130000);
+  assert.equal(r.phase, "playing");
+  assert.equal(r.startedAt, 133000);
+  assert.notDeepEqual(r.players[0].placed, original);
+  assert.deepEqual(r.wins, [0, 0, 0, 0, 0, 0, 0, 1]);
+  assert.ok(r.players.every((p) => p.submission === null && p.draft === null));
+});
+test("group ties include only the top scorers, and a departing guest does not close everyone’s race", () => {
+  const r = groupRoom(4);
+  applyAction(r, 0, { type: "start" }, 3000);
+  applyAction(r, 1, { type: "leave" }, 7000);
+  assert.equal(r.phase, "playing");
+  assert.equal(r.players[1].left, true);
+  assert.equal(r.players[1].submission.score, 0);
+  for (const i of [0, 2, 3])
+    applyAction(
+      r,
+      i,
+      { type: "submit", drawing: correct(r, i) },
+      i === 0 ? 126000 : 66000,
+    );
+  assert.equal(r.winner, "draw");
+  assert.deepEqual(r.winners, [2, 3]);
+  assert.deepEqual(r.wins, [0, 0, 0, 0]);
+  for (const i of [0, 2, 3]) applyAction(r, i, { type: "rematch" }, 130000);
+  assert.equal(r.phase, "playing");
+  assert.equal(r.players.length, 3);
+  assert.equal(
+    r.players.some((p) => p.left),
+    false,
+  );
+  assert.deepEqual(r.wins, [0, 0, 0]);
+});
+
+test("a guest leaving after the others accept a rematch releases the remaining players", () => {
+  const r = groupRoom(3);
+  applyAction(r, 0, { type: "start" }, 1000);
+  for (let i = 0; i < 3; i++)
+    applyAction(r, i, { type: "submit", drawing: correct(r, i) }, 124000);
+  applyAction(r, 0, { type: "rematch" }, 125000);
+  applyAction(r, 1, { type: "rematch" }, 125000);
+  applyAction(r, 2, { type: "leave" }, 125001);
+  assert.equal(r.phase, "playing");
+  assert.equal(r.players.length, 2);
+  assert.equal(r.startedAt, 128001);
+  assert.deepEqual(
+    r.players.map((p) => p.id),
+    [profiles[0].id, "group-player-1"],
+  );
 });
