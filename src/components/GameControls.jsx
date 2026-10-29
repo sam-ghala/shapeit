@@ -88,16 +88,27 @@ export function QueryLog({
                 aria-label={`Query ${i + 1}: ${getLabel(h.side, h.idx, cols, rows)} to ${h.absorbed ? "absorbed" : getLabel(h.exitSide, h.exitIdx, cols, rows)}`}
               >
                 <span className="query-number">{i + 1}</span>
-                {players && (
-                  <span className="query-player">
-                    {players[h.player]?.name}
+                <strong className="query-route">
+                  <span>{getLabel(h.side, h.idx, cols, rows)}</span>
+                  <svg
+                    className="query-arrow"
+                    viewBox="0 0 24 16"
+                    width="24"
+                    height="16"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M2 8h18m-5-5 5 5-5 5" />
+                  </svg>
+                  <span>
+                    {h.absorbed
+                      ? "Absorbed"
+                      : getLabel(h.exitSide, h.exitIdx, cols, rows)}
                   </span>
-                )}
-                <strong>
-                  {getLabel(h.side, h.idx, cols, rows)} →{" "}
-                  {h.absorbed
-                    ? "Absorbed"
-                    : getLabel(h.exitSide, h.exitIdx, cols, rows)}
                 </strong>
                 <span className="query-colors">
                   {h.absorbed
@@ -115,6 +126,11 @@ export function QueryLog({
                           />
                         ))}
                 </span>
+                {players && (
+                  <span className="query-player">
+                    {players[h.player]?.name}
+                  </span>
+                )}
               </button>
             </li>
           ))}

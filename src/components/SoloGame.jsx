@@ -1,8 +1,12 @@
+import { readTabState, writeTabState } from "../game/navigation.js";
+import { MenuButton } from "./MenuButton.jsx";
+import { SoundToggle } from "./SoundToggle.jsx";
+import { personalBests, readScores } from "../game/scores.js";
 import { ResultDialog } from "./ResultDialog.jsx";
 import { ExtraOptions } from "./ExtraOptions.jsx";
 import { writeJSON } from "../game/storage.js";
-import { unlockAudio } from "../game/audio.js";
-import { useState, useEffect } from "react";
+import { unlockAudio, playSound } from "../game/audio.js";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useGameSession } from "../hooks/useGameSession.js";
 import { nextPencilColor, trainingHint } from "../game/assistance.js";
 import { dailyDate, fireLaser } from "../game/engine.js";
@@ -11,28 +15,59 @@ import { ColorPicker, PieceList, QueryLog } from "./GameControls.jsx";
 import { HowToPlayModal } from "./HowToPlayModal.jsx";
 import { Dialog } from "./Dialog.jsx";
 
-export function SoloGame({ config, profile, effects, onHome, onDaily }) {
+export function SoloGame({
+  config,
+  profile,
+  effects,
+  onHome,
+  onDaily,
+  onConfigChange,
+}) {
   const state = useGameSession(config, profile);
   const { game, pieces, puzzle, history, cols, rows, storageError } = state;
+  const [savedView] = useState(() =>
+    readTabState(`shapeit:solo-view:${game.id}`, {}),
+  );
+  const previousGame = useRef(game.id);
+  useEffect(() => {
+    onConfigChange?.({
+      mode: game.mode,
+      size: game.size,
+      date: game.date,
+      extras: game.extras,
+      timed: true,
+    });
+  }, [game.id]);
   const [color, setColor] = useState(pieces[0].color),
-    [howTo, setHowTo] = useState(false),
+    [howTo, setHowTo] = useState(!!savedView.howTo),
     [confirm, setConfirm] = useState(null);
-  const [review, setReview] = useState("compare"),
+  const [review, setReview] = useState(
+      savedView.review === "solution" ? "solution" : "compare",
+    ),
     [replay, setReplay] = useState(null),
-    [resultOpen, setResultOpen] = useState(false),
+    [resultOpen, setResultOpen] = useState(!!savedView.resultOpen),
     [freshResult, setFreshResult] = useState(false),
     [selectionVersion, setSelectionVersion] = useState(0),
-    [optionsOpen, setOptionsOpen] = useState(false),
+    [optionsOpen, setOptionsOpen] = useState(!!savedView.optionsOpen),
     [nextExtras, setNextExtras] = useState(config.extras),
     [selected, setSelected] = useState(null),
     [now, setNow] = useState(Date.now()),
     [shareMessage, setShareMessage] = useState("");
+  const bestScore = useMemo(
+    () =>
+      personalBests(readScores(), game.mode, game.size).find(
+        (s) => s.id !== game.id,
+      )?.score ?? null,
+    [game.id],
+  );
   const finished = game.status !== "playing";
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
   useEffect(() => {
+    if (previousGame.current === game.id) return;
+    previousGame.current = game.id;
     setSelected(null);
     setReplay(null);
     setReview("compare");
@@ -40,6 +75,14 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
     setShareMessage("");
     setColor(pieces[0].color);
   }, [game.id, pieces]);
+  useEffect(() => {
+    writeTabState(`shapeit:solo-view:${game.id}`, {
+      howTo,
+      review,
+      resultOpen,
+      optionsOpen,
+    });
+  }, [game.id, howTo, review, resultOpen, optionsOpen]);
   const seconds = game.startedAt
     ? Math.max(
         0,
@@ -78,6 +121,7 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
     setResultOpen(true);
   };
   const fire = (side, idx) => {
+    playSound("laser");
     const existing = history.findIndex(
       (h) =>
         (h.side === side && h.idx === idx) ||
@@ -103,22 +147,23 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
   return (
     <main className="app-shell game-shell">
       <header className="topbar">
-        <button className="text-button" onClick={onHome}>
-          ← Menu
-        </button>
+        <MenuButton onClick={onHome} />
         <div>
           <strong>ShapeIt</strong>
           <span className="badge">
             {game.mode === "daily" ? `Daily · ${game.date}` : "Train mode"}
           </span>
         </div>
-        <button
-          aria-label="How to play"
-          title="How to play"
-          onClick={() => setHowTo(true)}
-        >
-          ?
-        </button>
+        <div className="header-actions">
+          <SoundToggle compact />
+          <button
+            aria-label="How to play"
+            title="How to play"
+            onClick={() => setHowTo(true)}
+          >
+            ?
+          </button>
+        </div>
       </header>
       {storageError && (
         <p className="notice" role="status">
@@ -151,8 +196,14 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             hideNotes={finished}
             hintPiece={!finished && hint?.level === 3 ? hint.piece : null}
             locked={finished}
-            onCell={(r, c) => state.cell(r, c, color)}
-            onEdge={(key) => state.edge(key, color)}
+            onCell={(r, c) => {
+              playSound("draw");
+              state.cell(r, c, color);
+            }}
+            onEdge={(key) => {
+              playSound("draw");
+              state.edge(key, color);
+            }}
             onLaser={fire}
             selectedColor={color}
             activeLaser={finished ? replay : null}
@@ -196,7 +247,10 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
                 <ColorPicker
                   pieces={pieces}
                   value={color}
-                  onChange={setColor}
+                  onChange={(next) => {
+                    playSound();
+                    setColor(next);
+                  }}
                 />
                 <button className="primary" onClick={submit}>
                   Submit solution
@@ -274,6 +328,8 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
           title={game.status === "won" ? "Solved!" : "Not solved"}
           won={game.status === "won"}
           score={game.score ?? 0}
+          bestScore={bestScore}
+          scoreEligible={!game.hintStep}
           detail={`${time} · ${history.length} lasers`}
           onClose={() => setResultOpen(false)}
           onNext={newBoard}
@@ -322,8 +378,10 @@ export function SoloGame({ config, profile, effects, onHome, onDaily }) {
             <button
               className="primary"
               onClick={() => {
-                if (confirm === "clear") state.clear();
-                else newBoard();
+                if (confirm === "clear") {
+                  playSound("clear");
+                  state.clear();
+                } else newBoard();
                 setConfirm(null);
               }}
             >

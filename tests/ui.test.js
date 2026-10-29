@@ -83,7 +83,11 @@ const config = {
   extras: false,
   timed: true,
 };
-function mount(type, props, nodeMock = () => ({ showModal() {}, close() {} })) {
+function mount(
+  type,
+  props,
+  nodeMock = () => ({ showModal() {}, close() {}, children: [] }),
+) {
   let rendered;
   act(() => {
     rendered = TestRenderer.create(React.createElement(type, props), {
@@ -383,5 +387,206 @@ test("phone menu has no board-size choice and training opens without an extras d
   } finally {
     act(() => view.unmount());
     navigator.userAgent = oldAgent;
+  }
+});
+
+test("reload retains the training board, drawing, lasers and result/board view", async () => {
+  entries.clear();
+  const tab = new Map();
+  globalThis.sessionStorage = {
+    getItem: (k) => tab.get(k) ?? null,
+    setItem: (k, v) => tab.set(k, v),
+  };
+  globalThis.location = { pathname: "/", search: "" };
+  const App = await component("src/App.jsx", "default");
+  let view = mount(App, {});
+  try {
+    act(() => button(view, "△Train mode▶").props.onClick());
+    const board = () =>
+      view.root.findAll((n) => n.props.className === "game-board")[0];
+    act(() => board().findByProps({ "data-cell": "0-0" }).props.onClick());
+    act(() =>
+      board().findByProps({ "aria-label": "Fire laser 1" }).props.onClick(),
+    );
+    const key = [...entries.keys()].find(
+      (k) => k.startsWith("shapeit:v") && k.includes(":training:"),
+    );
+    const before = readJSON(key, null);
+    assert.equal(before.history.length, 1);
+    assert.ok(before.guess[0][0]);
+    act(() => view.unmount());
+    view = mount(App, {});
+    assert.ok(button(view, "Submit solution"));
+    assert.deepEqual(readJSON(key, null), before);
+    act(() => button(view, "Submit solution").props.onClick());
+    act(() => view.unmount());
+    view = mount(App, {});
+    assert.ok(button(view, "See board"));
+    act(() => button(view, "See board").props.onClick());
+    act(() => view.unmount());
+    view = mount(App, {});
+    assert.equal(view.root.findAllByType("dialog").length, 0);
+    assert.ok(button(view, "New board →"));
+    act(() => button(view, "New board →").props.onClick());
+    const next = readJSON(key, null);
+    assert.notEqual(next.id, before.id);
+    act(() => view.unmount());
+    view = mount(App, {});
+    assert.ok(button(view, "Submit solution"));
+    assert.equal(readJSON(key, null).id, next.id);
+  } finally {
+    act(() => view.unmount());
+    delete globalThis.sessionStorage;
+  }
+});
+
+test("result meter marks the matching previous best and assisted results cannot claim a record", async () => {
+  const ResultDialog = await component(
+    "src/components/ResultDialog.jsx",
+    "ResultDialog",
+  );
+  const props = {
+    title: "Solved!",
+    won: true,
+    score: 5600,
+    bestScore: 6000,
+    animate: false,
+    onClose() {},
+    onNext() {},
+  };
+  const view = mount(ResultDialog, props);
+  assert.equal(
+    view.root.findByProps({ className: "best-marker" }).props.style.left,
+    "60%",
+  );
+  assert.ok(text(view.root).includes("400 to go"));
+  act(() =>
+    view.update(React.createElement(ResultDialog, { ...props, score: 6500 })),
+  );
+  assert.ok(text(view.root).includes("Personal best!"));
+  act(() =>
+    view.update(
+      React.createElement(ResultDialog, {
+        ...props,
+        score: 6500,
+        scoreEligible: false,
+      }),
+    ),
+  );
+  assert.ok(!text(view.root).includes("Personal best!"));
+  act(() => view.unmount());
+});
+
+test("tutorial uses the live game's animated board and query log, including reverse-entry replays", async () => {
+  const Guide = await component(
+    "src/components/HowToPlayModal.jsx",
+    "HowToPlayModal",
+  );
+  const view = mount(Guide, {
+    onClose() {},
+    pieces: buildPieces(42, "compact", false),
+  });
+  try {
+    assert.ok(!text(view.root).includes("Advanced"));
+    const board = () => view.root.findByProps({ className: "game-board" });
+    act(() =>
+      board().findByProps({ "aria-label": "Fire laser 1" }).props.onClick(),
+    );
+    const path = board().findByType("polyline");
+    assert.equal(path.props.className, "laser-path animate-laser");
+    assert.equal(path.props.style["--laser-length"], 48);
+    const firstPath = path.props.points;
+    assert.ok(firstPath.startsWith("56,32"), firstPath);
+    act(() =>
+      board().findByProps({ "aria-label": "Fire laser E" }).props.onClick(),
+    );
+    assert.ok(board().findByType("polyline").props.points.startsWith("56,224"));
+    assert.ok(
+      view.root.findAll((n) => n.props.className === "query-route").length >= 2,
+    );
+    act(() => button(view, "Try drawing").props.onClick());
+    assert.equal(board().findAllByType("polyline").length, 0);
+    act(() =>
+      board().findByProps({ "aria-label": "Fire laser 1" }).props.onClick(),
+    );
+    // The hidden example must not leak its path before the drawing is solved.
+    assert.equal(board().findAllByType("polyline").length, 0);
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test("a laser path remains visible if Safari pauses CSS animations in a background tab", async () => {
+  const view = mount(GameBoard, {
+    cols: 5,
+    rows: 4,
+    guess: emptyBoard(5, 4),
+    locked: true,
+    animate: true,
+    activeLaser: {
+      points: [
+        [0.5, 0],
+        [0.5, 0.5],
+        [0, 0.5],
+      ],
+    },
+    replayVersion: 1,
+  });
+  try {
+    assert.equal(
+      view.root.findByType("polyline").props.className,
+      "laser-path animate-laser",
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1650));
+    });
+    assert.equal(
+      view.root.findByType("polyline").props.className,
+      "laser-path",
+    );
+    assert.equal(
+      view.root.findByType("polyline").props.points,
+      "56,32 56,56 32,56",
+    );
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test("solo results use only the personal best from the same mode and size", () => {
+  entries.clear();
+  const base = {
+    status: "won",
+    finishedAt: Date.now(),
+    seconds: 30,
+    assisted: false,
+  };
+  writeJSON("shapeit:personal-scores", [
+    { ...base, id: "same", mode: "training", size: "compact", score: 4000 },
+    { ...base, id: "daily", mode: "daily", size: "compact", score: 9000 },
+    { ...base, id: "big", mode: "training", size: "classic", score: 8000 },
+    {
+      ...base,
+      id: "hint",
+      mode: "training",
+      size: "compact",
+      score: 7000,
+      assisted: true,
+    },
+  ]);
+  const view = mount(SoloGame, {
+    config,
+    profile: { id: "best-test", name: "Test" },
+    onHome() {},
+    onDaily() {},
+  });
+  try {
+    act(() => button(view, "Submit solution").props.onClick());
+    assert.equal(
+      view.root.findByProps({ className: "best-marker" }).props.style.left,
+      "40%",
+    );
+  } finally {
+    act(() => view.unmount());
   }
 });

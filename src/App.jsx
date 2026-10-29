@@ -1,3 +1,4 @@
+import { restoreNavigation, writeTabState } from "./game/navigation.js";
 import { useEffect, useState } from "react";
 import { mobilePlayer } from "./game/device.js";
 import { dailyDate, buildPieces } from "./game/engine.js";
@@ -19,26 +20,39 @@ import { Dialog } from "./components/Dialog.jsx";
 import { Scoreboard } from "./components/Scoreboard.jsx";
 export default function ShapeIt() {
   const initialCode = new URLSearchParams(location.search).get("room") || "";
-  const [screen, setScreen] = useState(
-    location.pathname === "/admin"
-      ? "admin"
-      : /^\d{4}$/.test(initialCode)
-        ? "duel"
-        : "menu",
+  const phone = mobilePlayer();
+  const [initial] = useState(() =>
+    restoreNavigation(
+      location,
+      phone || window.matchMedia("(max-width:860px)").matches
+        ? "compact"
+        : "classic",
+      phone,
+    ),
   );
+  const [screen, setScreen] = useState(initial.screen);
   const [profile, setProfile] = useState(getProfile),
     [name, setName] = useState(profile.name),
-    [profileOpen, setProfileOpen] = useState(false);
-  const phone = mobilePlayer();
-  const [size, setSize] = useState(() =>
-    phone || window.matchMedia("(max-width:860px)").matches
-      ? "compact"
-      : "classic",
-  );
-  const [scoresOpen, setScoresOpen] = useState(false),
-    [howTo, setHowTo] = useState(false);
-  const [config, setConfig] = useState(null),
+    [profileOpen, setProfileOpen] = useState(initial.dialog === "profile");
+  const [size, setSize] = useState(initial.size);
+  const [scoresOpen, setScoresOpen] = useState(initial.dialog === "scores"),
+    [howTo, setHowTo] = useState(initial.dialog === "howto");
+  const [config, setConfig] = useState(initial.config),
     [today, setToday] = useState(dailyDate());
+  useEffect(() => {
+    writeTabState("shapeit:view", {
+      screen,
+      size,
+      config,
+      dialog: scoresOpen
+        ? "scores"
+        : howTo
+          ? "howto"
+          : profileOpen
+            ? "profile"
+            : null,
+    });
+  }, [screen, size, config, scoresOpen, howTo, profileOpen]);
   useEffect(() => {
     writeJSON("shapeit:profile", profile);
   }, [profile]);
@@ -84,6 +98,7 @@ export default function ShapeIt() {
       <SoloGame
         key={`${config.mode}:${config.size}:${config.date}`}
         config={config}
+        onConfigChange={setConfig}
         profile={profile}
         effects
         onHome={home}

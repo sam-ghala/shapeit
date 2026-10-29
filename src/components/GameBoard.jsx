@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { PCOLORS, PFILL } from "../constants/gameConstants.js";
 import {
   computeOutlineEdges,
@@ -263,17 +263,10 @@ export function GameBoard({
         </g>
       )}
       {activeLaser?.points && (
-        <polyline
+        <LaserReplay
           key={`${replayVersion}:${JSON.stringify(activeLaser.points)}`}
-          className={animate ? "laser-path animate-laser" : "laser-path"}
-          points={activeLaser.points
-            .map(([x, y]) => `${M + x * Z},${M + y * Z}`)
-            .join(" ")}
-          pathLength="1"
-          fill="none"
-          stroke="#7c3aed"
-          strokeWidth="3"
-          strokeLinecap="round"
+          points={activeLaser.points}
+          animate={animate}
         />
       )}
       {!locked &&
@@ -412,5 +405,36 @@ export function GameBoard({
         ),
       )}
     </svg>
+  );
+}
+
+function LaserReplay({ points, animate }) {
+  const [complete, setComplete] = useState(false);
+  useEffect(() => {
+    // Background Safari windows can pause CSS animations. Still leave the
+    // complete path visible when the player returns to the board.
+    const timer = setTimeout(() => setComplete(true), 1600);
+    return () => clearTimeout(timer);
+  }, []);
+  const length = points.reduce(
+    (sum, [x, y], i) =>
+      i === 0
+        ? sum
+        : sum + Math.hypot(x - points[i - 1][0], y - points[i - 1][1]) * Z,
+    0,
+  );
+  return (
+    <polyline
+      className={
+        animate && !complete ? "laser-path animate-laser" : "laser-path"
+      }
+      points={points.map(([x, y]) => `${M + x * Z},${M + y * Z}`).join(" ")}
+      style={{ "--laser-length": Math.max(1, length) }}
+      onAnimationEnd={() => setComplete(true)}
+      fill="none"
+      stroke="#7c3aed"
+      strokeWidth="3"
+      strokeLinecap="round"
+    />
   );
 }

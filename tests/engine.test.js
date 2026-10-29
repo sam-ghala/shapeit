@@ -164,7 +164,7 @@ test("generated puzzles are legal and reversible for both sizes, including extra
           }
       }
 });
-test("scoring examples and time penalties agree with the advanced guide", () => {
+test("scoring examples and time penalties stay stable", () => {
   assert.equal(calcScore(120, 5), 5000);
   assert.equal(calcScore(120, 10), 4000);
   assert.ok(calcScore(120, 11) < 4000);

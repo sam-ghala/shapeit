@@ -1,7 +1,9 @@
+import { MenuButton } from "./MenuButton.jsx";
+import { SoundToggle } from "./SoundToggle.jsx";
 import { previewPlacement } from "../game/placement.js";
 import { ExtraOptions } from "./ExtraOptions.jsx";
 import { ResultDialog } from "./ResultDialog.jsx";
-import { unlockAudio } from "../game/audio.js";
+import { unlockAudio, playSound } from "../game/audio.js";
 import { nextPencilColor } from "../game/assistance.js";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -138,15 +140,16 @@ export function DuelGame({
   return (
     <main className="app-shell game-shell duel-shell">
       <header className="topbar">
-        <button className="text-button" onClick={onHome}>
-          ← Menu
-        </button>
+        <MenuButton onClick={onHome} />
         <h1>1 vs 1</h1>
-        {room && (
-          <span className="badge">
-            Room {room.code} · {room.round || 1}
-          </span>
-        )}
+        <div className="header-actions">
+          <SoundToggle compact />
+          {room && (
+            <span className="badge">
+              Room {room.code} · {room.round || 1}
+            </span>
+          )}
+        </div>
       </header>
       {error && (
         <p className="error" role="alert">
@@ -366,7 +369,8 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
       return;
     }
     setError("");
-    await action({ type: "place", placed: candidate.placed });
+    const result = await action({ type: "place", placed: candidate.placed });
+    if (result) playSound("draw");
   };
   const transform = async (kind) => {
     const next = kind === "rotate" ? rotateCells(cells, 1) : mirrorCells(cells);
@@ -394,6 +398,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
   const canDraw = !done && !setup && !me.submitted;
   const cell = (r, c) => {
     if (!canDraw) return;
+    playSound("draw");
     setDrawing((d) => {
       const guess = d.guess.map((row) => [...row]),
         old = guess[r][c];
@@ -412,6 +417,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
   };
   const edge = (key) => {
     if (!canDraw || color === "x") return;
+    playSound("draw");
     setDrawing((d) => {
       const edges = { ...d.edges };
       if (edges[key] === color) delete edges[key];
@@ -433,6 +439,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
           (q.exitSide === side && q.exitIdx === idx)),
     );
     if (done) {
+      playSound("laser");
       setSelectedQuery(existing >= 0 ? existing : null);
       setSelectionVersion((v) => v + 1);
       setReplay({
@@ -447,6 +454,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
       return;
     }
     if (existing >= 0) {
+      playSound("laser");
       setSelectedQuery(existing);
       setSelectionVersion((v) => v + 1);
       return;
@@ -456,6 +464,7 @@ function DuelBoard({ room, action, busy, effects, onNewRoom }) {
     const data = await action({ type: "laser", side, idx });
     const shot = data?.room?.queries.at(-1);
     if (shot?.player === room.you) {
+      playSound("laser");
       setColor(
         nextPencilColor(
           shot.colors,

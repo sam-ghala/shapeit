@@ -1,17 +1,15 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { PCOLORS, PFILL } from "../constants/gameConstants";
-import {
-  fillPoints,
-  diagLine,
-  computeOutlineEdges,
-  isFull,
-} from "../utils/gameUtils";
+import { GameBoard } from "./GameBoard.jsx";
+import { QueryLog, ColorPicker } from "./GameControls.jsx";
+import { playSound } from "../game/audio.js";
+import { emptyBoard } from "../game/engine.js";
+import React, { useState, useMemo } from "react";
+import { PCOLORS } from "../constants/gameConstants";
+import { fillPoints } from "../utils/gameUtils";
 import { fireLaser as traceLaser, checkSolution } from "../game/engine.js";
 import { Dialog } from "./Dialog.jsx";
 import { PiecePreview } from "./PiecePreview";
 
 /* ─── Interactive Training & Example ─── */
-const fireLaserLocal = (board, side, idx) => traceLaser(board, side, idx);
 
 const TRAIN_COLS = 5,
   TRAIN_ROWS = 4;
@@ -52,17 +50,6 @@ function buildTrainBoard() {
   return b;
 }
 const TRAIN_BOARD = buildTrainBoard();
-const TRAIN_TOP = ["1", "2", "3", "4", "5"];
-const TRAIN_LEFT = ["A", "B", "C", "D"];
-const TRAIN_RIGHT = ["6", "7", "8", "9"];
-const TRAIN_BOT = ["E", "F", "G", "H", "I"];
-function trainLabel(side, idx) {
-  if (side === "top") return TRAIN_TOP[idx];
-  if (side === "left") return TRAIN_LEFT[idx];
-  if (side === "right") return TRAIN_RIGHT[idx];
-  return TRAIN_BOT[idx];
-}
-
 const EX_COLS = 4,
   EX_ROWS = 3;
 const EX_PIECE = {
@@ -112,897 +99,144 @@ function TrainingAndExample() {
 
 function TrainingMode() {
   const [log, setLog] = useState([]);
-  const [laserPath, setLaserPath] = useState(null);
-  const [activeEntry, setActiveEntry] = useState(null);
-  const [activeExit, setActiveExit] = useState(null);
-  const Z = 36,
-    PM = 24;
-  const gw = TRAIN_COLS * Z,
-    gh = TRAIN_ROWS * Z;
-  const gx = (c) => PM + c * Z;
-  const gy = (r) => PM + r * Z;
-
+  const [active, setActive] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [version, setVersion] = useState(0);
   const fire = (side, idx) => {
-    const res = fireLaserLocal(TRAIN_BOARD, side, idx, TRAIN_COLS, TRAIN_ROWS);
-    const shuffled = res.colors;
-    setLaserPath(res.points);
-    const ek = `${side}-${idx}`;
-    setActiveEntry(ek);
-    setActiveExit(`${res.exitSide}-${res.exitIdx}`);
-    setLog((prev) => [
-      ...prev,
-      {
-        entry: trainLabel(side, idx),
-        exit: trainLabel(res.exitSide, res.exitIdx),
-        colors: shuffled,
-      },
-    ]);
-    setTimeout(() => {
-      setLaserPath(null);
-      setActiveEntry(null);
-      setActiveExit(null);
-    }, 3000);
+    playSound("laser");
+    const shot = { ...traceLaser(TRAIN_BOARD, side, idx), side, idx };
+    const existing = log.findIndex(
+      (h) =>
+        (h.side === side && h.idx === idx) ||
+        (h.exitSide === side && h.exitIdx === idx),
+    );
+    setSelected(existing < 0 ? log.length : existing);
+    if (existing < 0) setLog([...log, shot]);
+    setActive(shot);
+    setVersion((v) => v + 1);
   };
-
-  const buildPolyline = () =>
-    laserPath?.map(([x, y]) => `${PM + x * Z},${PM + y * Z}`);
-
-  const pathPoints = buildPolyline();
-
   return (
     <div>
-      <p style={{ fontSize: 13, color: "#666", margin: "0 0 10px" }}>
-        Click the labels to fire lasers. The laser bounces off piece edges.
-        Watch the laser log to see which colors were hit.
-      </p>
-      <div
-        style={{ display: "flex", justifyContent: "center", margin: "8px 0" }}
-      >
-        <svg
-          width={gw + PM * 2}
-          height={gh + PM * 2}
-          viewBox={`0 0 ${gw + PM * 2} ${gh + PM * 2}`}
-          style={{ maxWidth: "100%", height: "auto" }}
-        >
-          <rect x={PM} y={PM} width={gw} height={gh} fill="#fff" />
-          {Array.from({ length: TRAIN_COLS + 1 }, (_, i) => (
-            <line
-              key={`v${i}`}
-              x1={gx(i)}
-              y1={PM}
-              x2={gx(i)}
-              y2={PM + gh}
-              stroke="#ddd"
-              strokeWidth={i === 0 || i === TRAIN_COLS ? 1.5 : 0.5}
-            />
-          ))}
-          {Array.from({ length: TRAIN_ROWS + 1 }, (_, i) => (
-            <line
-              key={`h${i}`}
-              x1={PM}
-              y1={gy(i)}
-              x2={PM + gw}
-              y2={gy(i)}
-              stroke="#ddd"
-              strokeWidth={i === 0 || i === TRAIN_ROWS ? 1.5 : 0.5}
-            />
-          ))}
-
-          {TRAIN_PIECES.map((piece, pi) => (
-            <g key={pi}>
-              {piece.absCells.map(([r, c, t], ci) => (
-                <polygon
-                  key={ci}
-                  points={fillPoints(gx(c), gy(r), Z, t)}
-                  fill={PFILL[piece.color]}
-                />
-              ))}
-              {piece.absCells
-                .filter(([, , t]) => !isFull(t))
-                .map(([r, c, t], ci) => {
-                  const dl = diagLine(gx(c), gy(r), Z, t);
-                  return (
-                    <line
-                      key={`d${ci}`}
-                      {...dl}
-                      stroke={PCOLORS[piece.color]}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                  );
-                })}
-              {computeOutlineEdges(piece.absCells).map((ek, ei) => {
-                const [kind, aStr, bStr] = ek.split("-");
-                const a = parseInt(aStr),
-                  b = parseInt(bStr);
-                const ln =
-                  kind === "h"
-                    ? { x1: gx(b), y1: gy(a), x2: gx(b) + Z, y2: gy(a) }
-                    : { x1: gx(b), y1: gy(a), x2: gx(b), y2: gy(a) + Z };
-                return (
-                  <line
-                    key={`e${ei}`}
-                    {...ln}
-                    stroke={PCOLORS[piece.color]}
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-            </g>
-          ))}
-
-          {pathPoints && (
-            <polyline
-              points={pathPoints.join(" ")}
-              fill="none"
-              stroke="#1E88E5"
-              strokeWidth={2}
-
-              opacity={0.7}
-            />
-          )}
-
-          {TRAIN_TOP.map((l, i) => {
-            const k = `top-${i}`;
-            const a = activeEntry === k || activeExit === k;
-            return (
-              <g key={`t${i}`}>
-                <rect
-                  x={gx(i)}
-                  y={0}
-                  width={Z}
-                  height={PM - 2}
-                  fill="transparent"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => fire("top", i)}
-                />
-                {a && (
-                  <circle
-                    cx={gx(i) + Z / 2}
-                    cy={PM / 2}
-                    r={12}
-                    fill="rgba(30,136,229,0.15)"
-                  />
-                )}
-                <text
-                  x={gx(i) + Z / 2}
-                  y={PM / 2}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={11}
-                  fontWeight={a ? 700 : 500}
-                  fill={a ? "#1E88E5" : "#666"}
-                  style={{ pointerEvents: "none", userSelect: "none" }}
-                >
-                  {l}
-                </text>
-              </g>
-            );
-          })}
-          {TRAIN_BOT.map((l, i) => {
-            const k = `bottom-${i}`;
-            const a = activeEntry === k || activeExit === k;
-            return (
-              <g key={`b${i}`}>
-                <rect
-                  x={gx(i)}
-                  y={PM + gh + 2}
-                  width={Z}
-                  height={PM - 2}
-                  fill="transparent"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => fire("bottom", i)}
-                />
-                {a && (
-                  <circle
-                    cx={gx(i) + Z / 2}
-                    cy={PM + gh + PM / 2}
-                    r={12}
-                    fill="rgba(30,136,229,0.15)"
-                  />
-                )}
-                <text
-                  x={gx(i) + Z / 2}
-                  y={PM + gh + PM / 2}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={11}
-                  fontWeight={a ? 700 : 500}
-                  fill={a ? "#1E88E5" : "#666"}
-                  style={{ pointerEvents: "none", userSelect: "none" }}
-                >
-                  {l}
-                </text>
-              </g>
-            );
-          })}
-          {TRAIN_LEFT.map((l, i) => {
-            const k = `left-${i}`;
-            const a = activeEntry === k || activeExit === k;
-            return (
-              <g key={`l${i}`}>
-                <rect
-                  x={0}
-                  y={gy(i)}
-                  width={PM - 2}
-                  height={Z}
-                  fill="transparent"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => fire("left", i)}
-                />
-                {a && (
-                  <circle
-                    cx={PM / 2}
-                    cy={gy(i) + Z / 2}
-                    r={12}
-                    fill="rgba(30,136,229,0.15)"
-                  />
-                )}
-                <text
-                  x={PM / 2}
-                  y={gy(i) + Z / 2}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={11}
-                  fontWeight={a ? 700 : 500}
-                  fill={a ? "#1E88E5" : "#666"}
-                  style={{ pointerEvents: "none", userSelect: "none" }}
-                >
-                  {l}
-                </text>
-              </g>
-            );
-          })}
-          {TRAIN_RIGHT.map((l, i) => {
-            const k = `right-${i}`;
-            const a = activeEntry === k || activeExit === k;
-            return (
-              <g key={`r${i}`}>
-                <rect
-                  x={PM + gw + 2}
-                  y={gy(i)}
-                  width={PM - 2}
-                  height={Z}
-                  fill="transparent"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => fire("right", i)}
-                />
-                {a && (
-                  <circle
-                    cx={PM + gw + PM / 2}
-                    cy={gy(i) + Z / 2}
-                    r={12}
-                    fill="rgba(30,136,229,0.15)"
-                  />
-                )}
-                <text
-                  x={PM + gw + PM / 2}
-                  y={gy(i) + Z / 2}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={11}
-                  fontWeight={a ? 700 : 500}
-                  fill={a ? "#1E88E5" : "#666"}
-                  style={{ pointerEvents: "none", userSelect: "none" }}
-                >
-                  {l}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-      <div
-        style={{
-          fontSize: 12,
-          color: "var(--muted)",
-          marginBottom: 4,
-          fontWeight: 600,
-        }}
-      >
-        LASER LOG
-      </div>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: 12,
-          marginBottom: 8,
-        }}
-      >
-        <thead>
-          <tr style={{ borderBottom: "1.5px solid #ddd" }}>
-            {["#", "In", "Out", "Colors"].map((h) => (
-              <th
-                key={h}
-                style={{
-                  textAlign: "left",
-                  padding: "4px 6px",
-                  color: "var(--muted)",
-                  fontSize: 11,
-                }}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {log.length === 0 ? (
-            <tr>
-              <td
-                colSpan={4}
-                style={{
-                  padding: "10px 6px",
-                  color: "var(--muted)",
-                  fontSize: 12,
-                }}
-              >
-                Click a label to fire
-              </td>
-            </tr>
-          ) : (
-            log.map((h, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "4px 6px", color: "var(--muted)" }}>
-                  {i + 1}
-                </td>
-                <td style={{ padding: "4px 6px", fontWeight: 600 }}>
-                  {h.entry}
-                </td>
-                <td style={{ padding: "4px 6px", fontWeight: 600 }}>
-                  {h.exit}
-                </td>
-                <td style={{ padding: "4px 6px" }}>
-                  {h.colors.length === 0 ? (
-                    <span style={{ color: "var(--muted)" }}>none</span>
-                  ) : (
-                    <div style={{ display: "flex", gap: 3 }}>
-                      {h.colors.map((col, j) => (
-                        <div
-                          key={j}
-                          style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: "50%",
-                            background: PCOLORS[col],
-                            border:
-                              col === "white" ? "1.5px solid #ccc" : "none",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-      <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
-        Click any label as many times as you want. The color list does not
-        reveal the order in which pieces were hit.
-      </p>
+      <p className="guide-instruction">Tap a label to follow its laser.</p>
+      <GameBoard
+        cols={TRAIN_COLS}
+        rows={TRAIN_ROWS}
+        guess={emptyBoard(TRAIN_COLS, TRAIN_ROWS)}
+        revealed={TRAIN_PIECES.map((p, i) => ({ ...p, id: i }))}
+        locked
+        onLaser={fire}
+        activeLaser={active}
+        highlight={active}
+        queries={log}
+        animate
+        replayVersion={version}
+      />
+      <QueryLog
+        history={log}
+        cols={TRAIN_COLS}
+        rows={TRAIN_ROWS}
+        selected={selected}
+        selectionVersion={version}
+        onSelect={(i) => fire(log[i].side, log[i].idx)}
+      />
     </div>
   );
 }
 
 function ExampleMode() {
-  const [guess, setGuess] = useState(() =>
-    Array.from({ length: EX_ROWS }, () => Array(EX_COLS).fill(null)),
-  );
-  const [edgeColors, setEdgeColors] = useState({});
-  const [selColor, setSelColor] = useState("red");
-  const [solved, setSolved] = useState(false);
+  const [guess, setGuess] = useState(() => emptyBoard(EX_COLS, EX_ROWS));
+  const [edges, setEdges] = useState({});
+  const [color, setColor] = useState("red");
   const [log, setLog] = useState([]);
-  const [activeEntry, setActiveEntry] = useState(null);
-  const [activeExit, setActiveExit] = useState(null);
-  const [usedLabels, setUsedLabels] = useState(new Set());
-  const Z = 40,
-    PM = 24;
-  const gw = EX_COLS * Z,
-    gh = EX_ROWS * Z;
-  const gx = (c) => PM + c * Z;
-  const gy = (r) => PM + r * Z;
-  const EHIT = 14;
-  const EX_TOP = ["1", "2", "3", "4"];
-  const EX_LEFT = ["A", "B", "C"];
-  const EX_RIGHT = ["5", "6", "7"];
-  const EX_BOT = ["D", "E", "F", "G"];
-  const exLabel = (side, idx) => {
-    if (side === "top") return EX_TOP[idx];
-    if (side === "left") return EX_LEFT[idx];
-    if (side === "right") return EX_RIGHT[idx];
-    return EX_BOT[idx];
-  };
-
-  const exOutline = useMemo(() => computeOutlineEdges(EX_ABS), []);
-  const isSolved = useMemo(
+  const [active, setActive] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [version, setVersion] = useState(0);
+  const solved = useMemo(
     () =>
       checkSolution(
         guess,
-        edgeColors,
+        edges,
         [{ ...EX_PIECE, absCells: EX_ABS }],
         EX_COLS,
         EX_ROWS,
       ),
-    [guess, edgeColors],
+    [guess, edges],
   );
-
-  useEffect(() => {
-    if (isSolved && !solved) setSolved(true);
-  }, [isSolved, solved]);
-
-  const fireLaser = (side, idx) => {
-    if (solved) return;
-    const key = `${side}-${idx}`;
-    if (usedLabels.has(key)) return;
-    const res = fireLaserLocal(EX_BOARD, side, idx, EX_COLS, EX_ROWS);
-    const shuffled = res.colors;
-    setLog((prev) => [
-      ...prev,
-      {
-        entry: exLabel(side, idx),
-        exit: exLabel(res.exitSide, res.exitIdx),
-        colors: shuffled,
-      },
-    ]);
-    setActiveEntry(key);
-    setActiveExit(`${res.exitSide}-${res.exitIdx}`);
-    setUsedLabels((prev) => {
-      const n = new Set(prev);
-      n.add(key);
-      n.add(`${res.exitSide}-${res.exitIdx}`);
-      return n;
-    });
-    setTimeout(() => {
-      setActiveEntry(null);
-      setActiveExit(null);
-    }, 3000);
+  const fire = (side, idx) => {
+    playSound("laser");
+    const shot = { ...traceLaser(EX_BOARD, side, idx), side, idx };
+    const existing = log.findIndex(
+      (h) =>
+        (h.side === side && h.idx === idx) ||
+        (h.exitSide === side && h.exitIdx === idx),
+    );
+    setSelected(existing < 0 ? log.length : existing);
+    if (existing < 0 && !solved) setLog([...log, shot]);
+    setActive(shot);
+    setVersion((v) => v + 1);
   };
-
-  const clickCell = (r, c) => {
-    if (solved) return;
-    setGuess((prev) => {
-      const next = prev.map((row) => [...row]);
-      const cur = next[r][c];
-      if (!cur) next[r][c] = { color: selColor, type: "\\" };
-      else if (cur.color === selColor && cur.type === "\\")
-        next[r][c] = { color: selColor, type: "/" };
-      else if (cur.color === selColor && cur.type === "/") next[r][c] = null;
-      else next[r][c] = { color: selColor, type: "\\" };
-      return next;
-    });
-  };
-  const clickEdge = (key) => {
-    if (solved) return;
-    setEdgeColors((prev) => {
-      const n = { ...prev };
-      if (n[key] === selColor) delete n[key];
-      else n[key] = selColor;
-      return n;
-    });
-  };
-
-  const hEdges = [];
-  for (let line = 0; line <= EX_ROWS; line++) {
-    for (let c = 0; c < EX_COLS; c++)
-      hEdges.push({ key: `h-${line}-${c}`, x: gx(c), y: gy(line) });
-  }
-  const vEdges = [];
-  for (let r = 0; r < EX_ROWS; r++) {
-    for (let line = 0; line <= EX_COLS; line++)
-      vEdges.push({ key: `v-${r}-${line}`, x: gx(line), y: gy(r) });
-  }
-
-  const renderLabels = (labels, side) =>
-    labels.map((l, i) => {
-      const k = `${side}-${i}`;
-      const a = activeEntry === k || activeExit === k;
-      const u = usedLabels.has(k);
-      let x, y, w, h;
-      if (side === "top") {
-        x = gx(i);
-        y = 0;
-        w = Z;
-        h = PM - 2;
-      } else if (side === "bottom") {
-        x = gx(i);
-        y = PM + gh + 2;
-        w = Z;
-        h = PM - 2;
-      } else if (side === "left") {
-        x = 0;
-        y = gy(i);
-        w = PM - 2;
-        h = Z;
-      } else {
-        x = PM + gw + 2;
-        y = gy(i);
-        w = PM - 2;
-        h = Z;
-      }
-      const cx =
-        side === "left"
-          ? PM / 2
-          : side === "right"
-            ? PM + gw + PM / 2
-            : gx(i) + Z / 2;
-      const cy =
-        side === "top"
-          ? PM / 2
-          : side === "bottom"
-            ? PM + gh + PM / 2
-            : gy(i) + Z / 2;
-      return (
-        <g key={`${side}${i}`}>
-          <rect
-            x={x}
-            y={y}
-            width={w}
-            height={h}
-            fill="transparent"
-            style={{ cursor: solved ? "default" : "pointer" }}
-            onClick={() => fireLaser(side, i)}
-          />
-          {a && <circle cx={cx} cy={cy} r={12} fill="rgba(30,136,229,0.15)" />}
-          <text
-            x={cx}
-            y={cy}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={11}
-            fontWeight={a ? 700 : 500}
-            fill={a ? "#1E88E5" : u ? "#ccc" : "#666"}
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            {l}
-          </text>
-        </g>
-      );
-    });
-
   return (
     <div>
-      <p style={{ fontSize: 13, color: "#666", margin: "0 0 10px" }}>
-        Find the hidden red triangle. Fire lasers and draw its outline using
-        diagonals and edges.
+      <p className="guide-instruction">
+        {solved
+          ? "Solved! Try the lasers again."
+          : "Find and draw the red triangle."}
       </p>
-      <div
-        style={{
-          display: "flex",
-          gap: 16,
-          alignItems: "center",
-          justifyContent: "center",
-          flexWrap: "wrap",
-          margin: "8px 0",
+      <GameBoard
+        cols={EX_COLS}
+        rows={EX_ROWS}
+        guess={guess}
+        edges={edges}
+        pieces={[EX_PIECE]}
+        revealed={solved ? [{ ...EX_PIECE, absCells: EX_ABS }] : null}
+        locked={solved}
+        selectedColor={color}
+        onLaser={fire}
+        queries={log}
+        highlight={active}
+        activeLaser={solved ? active : null}
+        animate
+        replayVersion={version}
+        onCell={(r, c) => {
+          playSound("draw");
+          setGuess((old) => {
+            const next = old.map((row) => [...row]);
+            const cell = next[r][c];
+            next[r][c] =
+              color === "x"
+                ? cell?.color === "x"
+                  ? null
+                  : { color: "x", type: "x" }
+                : cell?.color !== color
+                  ? { color, type: "\\" }
+                  : cell.type === "\\"
+                    ? { color, type: "/" }
+                    : null;
+            return next;
+          });
         }}
-      >
-        <svg
-          width={gw + PM * 2}
-          height={gh + PM * 2}
-          viewBox={`0 0 ${gw + PM * 2} ${gh + PM * 2}`}
-          style={{ maxWidth: "100%", height: "auto" }}
-        >
-          <rect x={PM} y={PM} width={gw} height={gh} fill="#fff" />
-          {Array.from({ length: EX_COLS + 1 }, (_, i) => (
-            <line
-              key={`v${i}`}
-              x1={gx(i)}
-              y1={PM}
-              x2={gx(i)}
-              y2={PM + gh}
-              stroke="#ddd"
-              strokeWidth={i === 0 || i === EX_COLS ? 1.5 : 0.5}
-            />
-          ))}
-          {Array.from({ length: EX_ROWS + 1 }, (_, i) => (
-            <line
-              key={`h${i}`}
-              x1={PM}
-              y1={gy(i)}
-              x2={PM + gw}
-              y2={gy(i)}
-              stroke="#ddd"
-              strokeWidth={i === 0 || i === EX_ROWS ? 1.5 : 0.5}
-            />
-          ))}
-
-          {solved &&
-            EX_ABS.map(([r, c, t], i) => (
-              <polygon
-                key={i}
-                points={fillPoints(gx(c), gy(r), Z, t)}
-                fill={PFILL.red}
-              />
-            ))}
-
-          {guess.map((row, r) =>
-            row.map((cell, c) => {
-              if (!cell) return null;
-              const x = gx(c),
-                y = gy(r);
-              const dl = diagLine(x, y, Z, cell.type);
-              return (
-                <line
-                  key={`g${r}-${c}`}
-                  {...dl}
-                  stroke={PCOLORS[cell.color]}
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                />
-              );
-            }),
-          )}
-
-          {hEdges.map(({ key, x, y }) => {
-            const ec = edgeColors[key];
-            if (!ec) return null;
-            return (
-              <line
-                key={`ec-${key}`}
-                x1={x}
-                y1={y}
-                x2={x + Z}
-                y2={y}
-                stroke={PCOLORS[ec]}
-                strokeWidth={3}
-                strokeLinecap="round"
-              />
-            );
-          })}
-          {vEdges.map(({ key, x, y }) => {
-            const ec = edgeColors[key];
-            if (!ec) return null;
-            return (
-              <line
-                key={`ec-${key}`}
-                x1={x}
-                y1={y}
-                x2={x}
-                y2={y + Z}
-                stroke={PCOLORS[ec]}
-                strokeWidth={3}
-                strokeLinecap="round"
-              />
-            );
-          })}
-
-          {solved &&
-            exOutline.map((ek, i) => {
-              const [kind, aStr, bStr] = ek.split("-");
-              const a = parseInt(aStr),
-                b = parseInt(bStr);
-              const ln =
-                kind === "h"
-                  ? { x1: gx(b), y1: gy(a), x2: gx(b) + Z, y2: gy(a) }
-                  : { x1: gx(b), y1: gy(a), x2: gx(b), y2: gy(a) + Z };
-              return (
-                <line
-                  key={`so${i}`}
-                  {...ln}
-                  stroke={PCOLORS.red}
-                  strokeWidth={3}
-                  strokeLinecap="round"
-                />
-              );
-            })}
-
-          {renderLabels(EX_TOP, "top")}
-          {renderLabels(EX_BOT, "bottom")}
-          {renderLabels(EX_LEFT, "left")}
-          {renderLabels(EX_RIGHT, "right")}
-
-          {!solved &&
-            hEdges.map(({ key, x, y }) => (
-              <rect
-                key={`ht-${key}`}
-                x={x}
-                y={y - EHIT / 2}
-                width={Z}
-                height={EHIT}
-                fill="transparent"
-                style={{ cursor: "pointer" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clickEdge(key);
-                }}
-              />
-            ))}
-          {!solved &&
-            vEdges.map(({ key, x, y }) => (
-              <rect
-                key={`ht-${key}`}
-                x={x - EHIT / 2}
-                y={y}
-                width={EHIT}
-                height={Z}
-                fill="transparent"
-                style={{ cursor: "pointer" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clickEdge(key);
-                }}
-              />
-            ))}
-
-          {Array.from({ length: EX_ROWS }, (_, r) =>
-            Array.from({ length: EX_COLS }, (_, c) => (
-              <rect
-                key={`cl${r}-${c}`}
-                x={gx(c) + EHIT / 2}
-                y={gy(r) + EHIT / 2}
-                width={Z - EHIT}
-                height={Z - EHIT}
-                fill="transparent"
-                style={{ cursor: solved ? "default" : "crosshair" }}
-                onClick={() => clickCell(r, c)}
-              />
-            )),
-          )}
-        </svg>
-
-        <div style={{ textAlign: "center" }}>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--muted)",
-              marginBottom: 6,
-            }}
-          >
-            FIND THIS
-          </div>
-          <div
-            style={{ opacity: solved ? 0.2 : 1, transition: "opacity 0.5s" }}
-          >
-            <PiecePreview piece={EX_PIECE} found={false} size={28} />
-          </div>
-        </div>
-      </div>
-
+        onEdge={(key) => {
+          if (color === "x") return;
+          playSound("draw");
+          setEdges((old) => {
+            const next = { ...old };
+            if (next[key] === color) delete next[key];
+            else next[key] = color;
+            return next;
+          });
+        }}
+      />
       {!solved && (
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            justifyContent: "center",
-            margin: "8px 0",
-          }}
-        >
-          {Object.entries(PCOLORS).map(([name, hex]) => (
-            <button
-              key={name}
-              aria-label={`${name} pencil`}
-              onClick={() => setSelColor(name)}
-              style={{
-                width: 26,
-                height: 26,
-                minWidth: 26,
-                minHeight: 26,
-                borderRadius: "50%",
-                background: hex,
-                padding: 0,
-                flexShrink: 0,
-                border:
-                  selColor === name
-                    ? "2.5px solid #212121"
-                    : "2.5px solid transparent",
-                cursor: "pointer",
-                outline: "none",
-              }}
-            />
-          ))}
-        </div>
+        <ColorPicker pieces={[EX_PIECE]} value={color} onChange={setColor} />
       )}
-
-      <div
-        style={{
-          fontSize: 12,
-          color: "var(--muted)",
-          marginBottom: 4,
-          fontWeight: 600,
-        }}
-      >
-        LASER LOG
-      </div>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: 12,
-          marginBottom: 8,
-        }}
-      >
-        <thead>
-          <tr style={{ borderBottom: "1.5px solid #ddd" }}>
-            {["#", "In", "Out", "Colors"].map((h) => (
-              <th
-                key={h}
-                style={{
-                  textAlign: "left",
-                  padding: "4px 6px",
-                  color: "var(--muted)",
-                  fontSize: 11,
-                }}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {log.length === 0 ? (
-            <tr>
-              <td
-                colSpan={4}
-                style={{
-                  padding: "10px 6px",
-                  color: "var(--muted)",
-                  fontSize: 12,
-                }}
-              >
-                Click a label to fire
-              </td>
-            </tr>
-          ) : (
-            log.map((h, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "4px 6px", color: "var(--muted)" }}>
-                  {i + 1}
-                </td>
-                <td style={{ padding: "4px 6px", fontWeight: 600 }}>
-                  {h.entry}
-                </td>
-                <td style={{ padding: "4px 6px", fontWeight: 600 }}>
-                  {h.exit}
-                </td>
-                <td style={{ padding: "4px 6px" }}>
-                  {h.colors.length === 0 ? (
-                    <span style={{ color: "var(--muted)" }}>none</span>
-                  ) : (
-                    <div style={{ display: "flex", gap: 3 }}>
-                      {h.colors.map((col, j) => (
-                        <div
-                          key={j}
-                          style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: "50%",
-                            background: PCOLORS[col],
-                            border:
-                              col === "white" ? "1.5px solid #ccc" : "none",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-
-      {solved && (
-        <div
-          style={{
-            textAlign: "center",
-            background: "#e8f5e9",
-            borderRadius: 10,
-            padding: "14px 20px",
-            margin: "8px 0",
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#2e7d32" }}>
-            Great, you are ready to play!
-          </div>
-          <div style={{ fontSize: 12, color: "#66bb6a", marginTop: 4 }}>
-            You found the red triangle
-          </div>
-        </div>
-      )}
+      <QueryLog
+        history={log}
+        cols={EX_COLS}
+        rows={EX_ROWS}
+        selected={selected}
+        selectionVersion={version}
+        onSelect={(i) => fire(log[i].side, log[i].idx)}
+      />
     </div>
   );
 }
@@ -1320,30 +554,19 @@ export function HowToPlayModal({ onClose, pieces }) {
       </p>
 
       <div style={fig}>
-        <div
-          style={{
-            background: "white",
-            borderRadius: 8,
-            padding: "8px 16px",
-            border: "1px solid #e8e8e8",
-            fontSize: 13,
-            display: "flex",
-            gap: 20,
-            alignItems: "center",
-            width: "100%",
-            maxWidth: 340,
-          }}
-        >
-          <span style={{ color: "var(--muted)", fontSize: 12 }}>1</span>
-          <span style={{ fontWeight: 700 }}>P</span>
-          <span style={{ fontWeight: 700 }}>3</span>
-          <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
-            {dot(c3, 14)}
-            {dot(c1, 14)}
-            {dot(c4, 14)}
-            {dot(c2, 14)}
-          </div>
-        </div>
+        <QueryLog
+          cols={10}
+          rows={8}
+          history={[
+            {
+              side: "bottom",
+              idx: 7,
+              exitSide: "top",
+              exitIdx: 2,
+              colors: ["yellow", "red", "white", "blue"],
+            },
+          ]}
+        />
         <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
           Laser entered at P, exited at 3. Hit {dot(c3)} yellow, {dot(c1)} red,{" "}
           {dot(c4)} white, and {dot(c2)} blue
@@ -1562,58 +785,6 @@ export function HowToPlayModal({ onClose, pieces }) {
         you complete an outline, it fills with color. Helpful to track your
         progress.
       </div>
-
-      <details className="advanced-guide">
-        <summary>Advanced</summary>
-        <h3>Daily & train mode</h3>
-        <p>
-          The clock starts with your first laser, pencil mark or training hint.
-          It keeps running when you leave or reload. You get one submission per
-          round.
-        </p>
-        <p>
-          Your score is the time factor × the laser factor, rounded to the
-          nearest whole point. The time factor is 200 ÷ (minutes + 2). Up to 5
-          lasers gives a laser factor of 100; lasers 6–10 subtract 4 each (96
-          down to 80). Above 10, the factor is 80 × exp(−0.3 × (lasers − 10)).
-        </p>
-        <p>
-          Example: 2 minutes and 5 lasers = 5,000 points. 2 minutes and 10
-          lasers = 4,000. Reopening an existing laser clue costs nothing.
-          Training hints reveal an area, a starting cell, then an outline;
-          rounds with hints are not saved to your scores. Daily puzzles reset at
-          00:00 UTC and are shared by players using the same board size.
-        </p>
-        <h3>Transparent diamond</h3>
-        <p>
-          The cyan dashed outline is your pencil color. The piece reflects
-          normally but adds no color to the laser. A colorless result does not
-          necessarily mean an empty path.
-        </p>
-        <h3>Black body</h3>
-        <p>
-          The black piece absorbs the laser: no exit and no colors are reported.
-          In ShapeIt it is a one-cell square, so only its position matters. Draw
-          its four outside edges.
-        </p>
-        <h3>1 vs 1</h3>
-        <p>
-          Join with a link or a four-digit code. Two computers use a big board;
-          if either player uses a phone, both use a small board. Both receive
-          the same normal pieces for that board size. Start with an empty board,
-          select a shape and place it. There is no setup timer: play starts when
-          both players confirm complete, legal boards. Only the two extra pieces
-          are optional.
-        </p>
-        <p>
-          Take turns firing one laser. Both players see each query and its
-          feedback, but never the hidden laser path. After a submission the
-          opponent has 60 seconds for one final solution, without another laser.
-          Both correct: draw. One correct: that player wins. Both wrong: both
-          lose. Afterwards you can inspect both drawings, solutions and laser
-          paths.
-        </p>
-      </details>
     </Dialog>
   );
 }
