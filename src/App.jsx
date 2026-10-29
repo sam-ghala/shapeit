@@ -206,6 +206,9 @@ export default function ShapeIt() {
         <button onClick={() => setScoresOpen(true)}>★ Scores</button>
         <button onClick={() => setHowTo(true)}>How to play</button>
       </div>
+      <a className="sibling-game" href="/pushit">
+        Try PushIt <span aria-hidden="true">→</span>
+      </a>
       <div className="menu-install">
         <InstallButton />
       </div>

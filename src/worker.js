@@ -7,6 +7,12 @@ import {
   roomView,
   cleanProfile,
 } from "./server/duel.js";
+import {
+  createPushRoom,
+  joinPushRoom,
+  pushRoomView,
+  applyPushAction,
+} from "./pushit/rooms.js";
 const json = (data, status = 200) =>
   Response.json(data, {
     status,
@@ -94,6 +100,9 @@ export class GameService {
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, window INTEGER NOT NULL, count INTEGER NOT NULL)",
     );
+    this.sql.exec(
+      "CREATE TABLE IF NOT EXISTS pushit_rooms (code TEXT PRIMARY KEY, data TEXT NOT NULL, expires INTEGER NOT NULL)",
+    );
   }
   event(input, now) {
     const profile = cleanProfile({ id: input.profileId, name: input.name });
@@ -162,16 +171,15 @@ export class GameService {
   rateLimit(request, url, body) {
     const now = Date.now();
     this.sql.exec("DELETE FROM limits WHERE window < ?", now - 60000);
-    const category =
-      url.pathname === "/api/rooms"
-        ? "create"
-        : url.pathname.endsWith("/join")
-          ? "join"
-          : url.pathname.endsWith("/action") && body.type === "draft"
-            ? "draft"
-            : request.method === "GET"
-              ? "read"
-              : "write";
+    const category = ["/api/rooms", "/api/pushit/rooms"].includes(url.pathname)
+      ? "create"
+      : url.pathname.endsWith("/join")
+        ? "join"
+        : url.pathname.endsWith("/action") && body.type === "draft"
+          ? "draft"
+          : request.method === "GET"
+            ? "read"
+            : "write";
     const key = `${request.headers.get("X-Rate-Key")}:${category}`;
     const limit = { create: 6, join: 30, read: 600, write: 480, draft: 400 }[
       category
@@ -190,6 +198,8 @@ export class GameService {
   }
   handle(request, url, body) {
     const now = Date.now();
+    if (url.pathname.startsWith("/api/pushit/"))
+      return this.handlePushIt(request, url, body, now);
     this.sql.exec("DELETE FROM rooms WHERE expires < ?", now);
     this.sql.exec("DELETE FROM events WHERE at < ?", now - 30 * 86400000);
     this.sql.exec("DELETE FROM limits WHERE window < ?", now - 60000);
@@ -357,6 +367,88 @@ export class GameService {
     if (body.type === "draft" || index < 0) return json({ ok: true });
     return json({
       room: roomView(room, index, now),
+      ...(joined ? { token } : {}),
+    });
+  }
+  handlePushIt(request, url, body, now) {
+    this.sql.exec("DELETE FROM pushit_rooms WHERE expires < ?", now);
+    if (url.pathname === "/api/pushit/rooms" && request.method === "POST") {
+      let code;
+      for (let i = 0; i < 100; i++) {
+        const candidate = String(
+          crypto.getRandomValues(new Uint32Array(1))[0] % 10000,
+        ).padStart(4, "0");
+        if (
+          ![
+            ...this.sql.exec(
+              "SELECT code FROM pushit_rooms WHERE code = ?",
+              candidate,
+            ),
+          ].length
+        ) {
+          code = candidate;
+          break;
+        }
+      }
+      if (!code)
+        return json(
+          { error: "All rooms are busy. Please try again later." },
+          503,
+        );
+      const room = createPushRoom(
+        code,
+        body.profile,
+        body.hostColor,
+        body.starter,
+        now,
+      );
+      this.sql.exec(
+        "INSERT INTO pushit_rooms (code,data,expires) VALUES (?,?,?)",
+        code,
+        JSON.stringify(room),
+        room.expiresAt,
+      );
+      return json(
+        { room: pushRoomView(room, 0), token: room.players[0].token },
+        201,
+      );
+    }
+    const match = url.pathname.match(
+      /^\/api\/pushit\/rooms\/(\d{4})(?:\/(join|action))?$/,
+    );
+    if (!match) return json({ error: "Not found." }, 404);
+    const row = [
+      ...this.sql.exec(
+        "SELECT data FROM pushit_rooms WHERE code = ?",
+        match[1],
+      ),
+    ][0];
+    if (!row)
+      return json(
+        { error: "Room not found or expired. Ask your friend for a new code." },
+        404,
+      );
+    const room = JSON.parse(row.data);
+    let token = bearer(request),
+      index = room.players.findIndex((p) => p.token === token),
+      joined = false;
+    if (match[2] === "join" && request.method === "POST") {
+      token = joinPushRoom(room, body.profile);
+      index = room.players.length - 1;
+      joined = true;
+    } else if (index < 0)
+      return json({ error: "Join with the room code first." }, 403);
+    if (match[2] === "action" && request.method === "POST")
+      applyPushAction(room, index, body);
+    else if (!joined && request.method !== "GET")
+      return json({ error: "Method not allowed." }, 405);
+    this.sql.exec(
+      "UPDATE pushit_rooms SET data = ? WHERE code = ?",
+      JSON.stringify(room),
+      room.code,
+    );
+    return json({
+      room: pushRoomView(room, index),
       ...(joined ? { token } : {}),
     });
   }

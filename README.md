@@ -34,6 +34,17 @@ The HTTP integration test needs the local Worker running with the sample key. Ov
 - Laser hits keep the selected color if it was hit; otherwise they choose an unfinished hit color randomly, based on complete shapes in the drawing. Completed piece icons dim regardless of whether their positions are correct. The single-column log scrolls the selected shot into view without moving the page.
 - Profiles use a freely chosen name and a random local ID. There is no account recovery or cross-device identity. The menu marks the daily as pending, in progress or finished. A personal local scoreboard separates daily/training and board sizes. It excludes all rounds with hints, has no time-based expiry, and keeps the top 20 per category plus the 200 most recent results; no database or public ranking is required.
 
+## PushIt
+
+Open `/pushit` for the two-player strategy game, styled to match ShapeIt. The ShapeIt menu links to it; `/` still opens ShapeIt. PushIt implements the [official DUAT 2026 rules](https://unphazedgames.com/s/Duat-Rulebook-2026-Web.pdf) by Caleb Carvalho (Unphazed Games), with original geometric pieces and the rulebook's exact 4×4 setup.
+
+- Rotate 90°, advance one square, or push a contiguous row. Each costs one action. Take exactly one or three actions per turn, distributed among any of your pieces; after two, a third is mandatory. Three actions automatically pass the turn. Opposing or friendly pieces facing the pusher block the entire chain. Pushed pieces retain their orientation. Moving yourself off the edge is forbidden; pushing an opponent off wins immediately. Friendly ejection alone does not win. There are no extra timers or automatic draw rules.
+- **Same device:** both players share a board. The player who most recently saw a sunrise chooses their starting color. The board and action count survive refresh under `pushit:local:v1`; undo is available only within the unfinished local turn. Starting a replacement game requires confirmation.
+- **Play a friend:** create or join a four-digit private room, or use `/pushit?room=1234`. The host sets their color and starting side. Both players see the full board, with server-enforced actions and revision checks. Polling runs every 1.5 seconds. A move takes priority over a background poll. Refresh reconnects the saved browser seat. Both players must request a rematch or agree to reset a stuck position; room wins remain. Leaving closes the room without awarding an unfinished win. Rooms expire after two hours.
+- The built-in guide links to the original rulebook and illustrates the starting position. All controls work by touch or keyboard. Sound uses ShapeIt's existing preference. Same-device play works offline after the app has been cached; online rooms require a connection.
+
+PushIt shares the existing Worker and Durable Object binding, with its own `pushit_rooms` table and `/api/pushit/rooms` routes. It requires no extra Cloudflare resources or deployment settings. Source lives in `src/pushit/`. Rule and UI tests run with `npm test`; run `node tests/pushit.http.integration.mjs` against a local Worker to verify private rooms and direct URLs.
+
 ## Scoring
 
 A correct board scores time × laser efficiency, rounded to an integer; a wrong board scores zero. Time is `200 / (seconds / 60 + 2)`. Laser efficiency is 100 for 0–5 shots, `120 - 4 × shots` for 6–10, then `80 × exp(-0.05 × (shots - 10))`. This preserves the original early scoring and time curve while removing the sharp penalty after ten shots.
