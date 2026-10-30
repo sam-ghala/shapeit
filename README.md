@@ -1,6 +1,8 @@
-# ShapeIt
+# ShapeIt, PushIt & ChessIt
 
-A laser deduction game by Robin and Sam. React/Vite frontend and a Cloudflare Worker with SQLite-backed Durable Objects for private duels and recent activity.
+A shared game platform by Robin and Sam. ShapeIt remains the homepage; PushIt is available at `/pushit` and the independent ChessIt starter at `/chessit`. Each game has its own UI, rules, state and server handlers. React/Vite frontend and one Cloudflare Worker with SQLite-backed Durable Objects serve the games and a shared admin panel.
+
+The public player name/ID and visual language are shared. Game progress, room credentials and scores stay game-specific. See [AGENTS.md](AGENTS.md) for ownership and design rules, and [the ChessIt starter guide](src/games/chessit/README.md) to build a new game without reading the others.
 
 ## Local development
 
@@ -38,19 +40,19 @@ The HTTP integration test needs the local Worker running with the sample key. Ov
 
 Open `/pushit` for the two-player strategy game. The menu links back to ShapeIt, and pressing the PushIt logo returns to its own menu. Choose a name in the menu; an unnamed player is prompted before creating or joining an online room. The profile is shared with ShapeIt.
 
-Take exactly one or three actions per turn: rotate 90°, advance one square, or push a contiguous row. Any piece facing the pusher blocks the entire chain, including friendly pieces. Pushing an opponent off wins immediately; moving yourself off is forbidden. Select a piece to reveal the rotation arrows and forward target. Moves and quarter-turns animate, and a winning push slides the opponent off before revealing the result. The short guide has three pages. Move history and extra instruction panels are omitted.
+Take exactly one or three actions per turn: rotate 90°, advance one square, or push a contiguous row. Any piece facing the pusher blocks the entire chain, including friendly pieces. Pushing an opponent off wins immediately; moving yourself off is forbidden. Select a piece to reveal rotation arrows on its left and right relative to its own facing direction, plus the forward target. Moves and quarter-turns animate, and a winning push slides the opponent off before revealing the result. The short guide has three pages. Move history and extra instruction panels are omitted.
 
-**Same device:** play Free Play or a best-of series. Scores persist across rounds and refreshes in `pushit:match:v2`; older `pushit:local:v1` boards migrate automatically. Undo needs no approval and can restore the most recent action, a completed turn, or a winning move with its score. The latest 24 actions remain available until the next round. Optional auto-rotation waits one second after a completed turn, rotates the board 180° in 420 ms, and prevents input until the rotation ends. Reduced-motion preferences skip the visual animation.
+**Same device:** play Free Play or a best-of series. Scores persist across rounds and refreshes in `pushit:match:v2`; older `pushit:local:v1` boards migrate automatically. Undo needs no approval and can restore the most recent action or a completed turn while the round is still playing. Completed games cannot be undone. The latest 24 actions remain available during the current round. Auto-rotation defaults on, has a prominent checkbox, and waits one second after a completed turn, rotates the board 180° in 420 ms, and prevents input until the rotation ends. Reduced-motion preferences skip the visual animation.
 
-**Online rooms:** creating a room opens a lobby before game settings are chosen. Both players can select Black or White with buttons; colors stay opposite. The host chooses Free Play or an odd best-of length from 3 to 99, then starts after a second player joins. The server randomly chooses the first starter; completed rounds then alternate the starting color. Each online player always sees their own color at the bottom. A compact name/score strip shows whose turn it is, with a sound cue and browser-tab title for a new turn.
+**Online rooms:** creating a room opens a lobby before game settings are chosen. Only the host can select Black or White with buttons; the guest receives the opposite color. The host chooses Free Play or an odd best-of length from 3 to 99, then starts after a second player joins. The server randomly chooses the first starter; completed rounds then alternate the starting color. Each online player always sees their own color at the bottom. A compact name/score strip shows whose turn it is, with a sound cue and browser-tab title for a new turn.
 
-Scores progress across rounds (1:0, 2:0, 2:1, etc.). Free Play continues indefinitely; best-of series finish when one player reaches a majority of wins. Both players must accept the next round or a new series. A new series resets the score. An online undo request is available only for the latest action's author, including after a turn or win; it pauses play until the opponent approves or declines. Approval restores the board, action budget, turn, score and series status. Undo snapshots and credentials are never included in room views. Consensual reset restarts the unfinished round without changing the score or starter. Leaving closes the room without inventing a win.
+Scores progress across rounds (1:0, 2:0, 2:1, etc.). Free Play continues indefinitely; best-of series finish when one player reaches a majority of wins. Both players must accept the next round. After the series-winning round, a separate champion screen celebrates the final result. Each player returns to the lobby; once both return, the host can change colors/format and start a fresh series with a reset score. Same-device series also return to their setup lobby. An online undo request is available only for the latest action's author during an unfinished round, including after a turn; it pauses play until the opponent approves or declines. Approval restores the board, action budget and turn. A winning move is final. Undo snapshots and credentials are never included in room views. Consensual reset restarts the unfinished round without changing the score or starter. Leaving closes the room without inventing a win. Same-device games have a Leave game control that clears the current local match; the logo returns to the menu while preserving it.
 
 Rooms use four-digit codes, `/pushit?room=1234` invite links, 1.5-second polling and two-hour expiry. A move takes priority over a background poll. Refresh reconnects a saved browser seat. PushIt shares the existing Worker/Durable Object, with its own `pushit_rooms` table and `/api/pushit/rooms` routes; no extra hosting resources are needed. Existing active rooms retain their board, credentials and score during migration.
 
-All PushIt screens fit the viewport without page scrolling, including the paged guide and result dialog. Same-device play works offline after caching; online rooms require a connection. Sound uses the existing preference. Source is in `src/pushit/`.
+All PushIt screens fit the viewport without page scrolling, including the paged guide and result dialog. Same-device play works offline after caching; online rooms require a connection. Sound preserves the previous setting on first use, then stores preferences per game. Source is in `src/games/pushit/`.
 
-Validation: `npm test` includes engine, match, approval, series and UI checks. `node tests/pushit.http.integration.mjs` plays a complete 2:1 series through a local Worker, including undo of a winning move, starter alternation and a new series. For Safari layout checks, start Vite and open `/tests/pushit.browser.html`; its matrix audits ten screens at five phone, desktop and landscape sizes for scrolling, clipped controls and square cells. Real browser online play should use the built Worker at port 8787 so the UI and API share an origin.
+Validation: `npm test` includes engine, match, approval, series and UI checks. `node tests/pushit.http.integration.mjs` plays a complete 2:1 series through a local Worker, including rejection of undo after a win, starter alternation and return to the lobby before a new series. For Safari layout checks, start Vite and open `/tests/pushit.browser.html`; its matrix audits ten screens at five phone, desktop and landscape sizes for scrolling, clipped controls and square cells. Real browser online play should use the built Worker at port 8787 so the UI and API share an origin.
 
 ## Scoring
 
@@ -70,7 +72,7 @@ In Take turns, each player has a separate laser log. Clicking an opponent shot r
 
 ## Admin and data
 
-`/admin` currently accepts the temporary test key `Admin` when no server-side `ADMIN_KEY` is configured. A configured secret replaces this fallback. The key is supplied as an Authorization header. The UI keeps it only in memory. The last 30 days of start/finish activity are retained. The player list covers all retained events, groups by player ID and shows each player's latest chosen name, distinct games, completed games and last play time. Search by name/ID and select a player to filter activity server-side; the view shows up to 500 events for that selection: local player ID, chosen name, mode, result, laser count, duration and score. Solo events are reported by the browser and can be delayed while offline; their play time and receipt time are separate. Duel results are generated by the server. Names and solo scores are not verified identities or competitive evidence.
+`/admin` currently accepts the temporary test key `Admin` when no server-side `ADMIN_KEY` is configured. A configured secret replaces this fallback. The key is supplied as an Authorization header. The UI keeps it only in memory. The last 30 days of start/finish activity are retained for every game. The Game selector filters both the player list and activity, and can be combined with a player filter. Existing events without a game field are treated as ShapeIt. PushIt logs local rounds and server-authoritative online rounds, including result, turn count and series score. ChessIt currently logs preview visits, which do not count as played or completed games. The player list covers all retained events, groups by player ID and shows each player's latest chosen name, distinct games, completed games and last play time. Search by name/ID and select a player to filter activity server-side; the view shows up to 500 events for that selection: local player ID, chosen name, mode, result, laser count, duration and score. Solo events are reported by the browser and can be delayed while offline; their play time and receipt time are separate. Online results are generated by each game's server handler. Names and solo scores are not verified identities or competitive evidence.
 
 Room tokens and opponent layouts never appear in public activity. Requests are rate-limited using a daily hash of the connecting IP; the admin view does not collect device hardware details. Expired data is cleaned on subsequent API activity. The former `/api/log` endpoint is inert and no longer forwards logs to Google Sheets.
 
@@ -92,11 +94,26 @@ npm run deploy
 
 Supply a strong private key interactively; never put it into `VITE_*`, source control or an invite link. If the existing GitHub integration deploys the Worker, it must run the build and deploy with this Wrangler configuration so the binding and migration are applied. A static-assets-only publication cannot run duels or admin. Keep the existing domain routing/account settings. After deployment, verify a two-device duel, `/admin`, phone installation and a subsequent offline launch on the live origin.
 
+## Subdomains and deployment safety
+
+Hostname routing is ready for `pushit.playshapeit.com` and `chessit.playshapeit.com`; the main domain continues to show ShapeIt. Local development and existing links use `/pushit` and `/chessit`. Menu links currently use these working paths because the new domains have not been connected yet.
+
+To activate subdomains, add those two **Custom Domains** to the existing `shapeit` Worker in Cloudflare → Settings → Domains & Routes. Keep the current main-domain bindings and the same Worker. Cloudflare provisions their DNS and TLS; see [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/). After both domains respond successfully, set `VITE_GAME_SUBDOMAINS=true` in the existing build environment and redeploy. `.env.example` documents the flag. Do not add an incomplete `routes` list that could remove existing dashboard-managed bindings.
+
+Only the public profile is shared across production subdomains, through a `Secure; SameSite=Lax` parent-domain cookie. Existing `shapeit:profile` IDs migrate automatically; tabs refresh the name on focus. Browser game saves and room tokens stay on their original origin, so existing games remain reachable at their existing URLs. The legacy paths are intentionally not redirected. The shared server/admin sees every origin through the same Durable Object.
+
 ## Code map
 
-- `src/game/engine.js`: shared deterministic geometry, generation, tracing and scoring.
-- `src/hooks/useGameSession.js`, `src/game/storage.js`: solo lifecycle, local persistence and activity queue.
-- `src/components/`: board, guide, menu flows, duels, installation and admin UI.
-- `src/server/duel.js`: authoritative multiplayer state transitions and filtered views.
-- `src/worker.js`: API, transactional room storage, activity, authentication and rate limits.
-- `tests/`: engine properties, saved-game lifecycle, duel rules and real-Worker HTTP integration.
+- `src/games/shapeit/`: original ShapeIt implementation, with [its own guide](src/games/shapeit/README.md).
+- `src/games/pushit/`: independent PushIt implementation, with [its own guide](src/games/pushit/README.md).
+- `src/games/chessit/`: isolated placeholder and [step-by-step extension guide](src/games/chessit/README.md).
+- `src/games/catalog.js`: game metadata and activity modes; one registry entry per game.
+- `src/shared/theme.css`: global design tokens, base styles and reusable controls.
+- `src/shared/`: profile, storage/navigation helpers, audio and activity queue; no game engines.
+- `src/platform/App.jsx`, `routing.js`: lazy game entry points and host/path routing.
+- `src/platform/admin/`: shared activity screen with game/player filters.
+- `src/platform/server/`: transactional storage, generic activity schema, authentication helpers and rate limits.
+- `src/worker.js`: request validation/authentication and stable Durable Object export.
+- `tests/`: rule, UI, migration, architecture-boundary and real-Worker API checks.
+
+Adding another game requires its own folder, a catalog entry and a lazy entry point. Add a namespaced server handler only if the game needs one. Neither existing game's source needs to be edited. The Worker name, durable object class/ID, database tables, existing API paths and saved-state keys are retained by this refactor.

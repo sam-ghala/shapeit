@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import { useGameSession } from "../src/hooks/useGameSession.js";
+import { useGameSession } from "../src/games/shapeit/hooks/useGameSession.js";
 import {
   loadSession,
   createSession,
   sessionKey,
   writeJSON,
-} from "../src/game/storage.js";
-import { solutionDrawing } from "../src/game/engine.js";
+} from "../src/games/shapeit/game/storage.js";
+import { solutionDrawing } from "../src/games/shapeit/game/engine.js";
 
 const entries = new Map();
 globalThis.localStorage = {

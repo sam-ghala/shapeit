@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calcScore, scoreBreakdown } from "../src/game/engine.js";
+import { calcScore, scoreBreakdown } from "../src/games/shapeit/game/engine.js";
 
 test("scoring preserves early clues and time curve, with a smooth penalty beyond ten lasers", () => {
   assert.equal(calcScore(120, 5), 5000);

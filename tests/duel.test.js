@@ -9,14 +9,14 @@ import {
   FINAL_MS,
   RACE_COUNTDOWN_MS,
   MAX_RACE_PLAYERS,
-} from "../src/server/duel.js";
+} from "../src/games/shapeit/server/duel.js";
 import {
   SIZES,
   solutionDrawing,
   emptyBoard,
   generatePuzzle,
   buildPieces,
-} from "../src/game/engine.js";
+} from "../src/games/shapeit/game/engine.js";
 const profiles = [
   { id: "player-one", name: "Robin" },
   { id: "player-two", name: "Sam" },
@@ -285,7 +285,7 @@ function raceRoom(extras = false) {
   return r;
 }
 test("host selects score race; both players act independently and only server time and clues count", async () => {
-  const { calcScore } = await import("../src/game/engine.js");
+  const { calcScore } = await import("../src/games/shapeit/game/engine.js");
   const r = raceRoom(true);
   assert.equal(roomView(r, 0, 3000).startedAt, 6000);
   applyAction(r, 1 - r.turn, { type: "laser", side: "top", idx: 0 }, 7000);

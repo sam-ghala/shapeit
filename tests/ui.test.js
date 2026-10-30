@@ -10,13 +10,13 @@ import {
   writeJSON,
   readJSON,
   sessionKey,
-} from "../src/game/storage.js";
+} from "../src/games/shapeit/game/storage.js";
 import {
   buildPieces,
   generatePuzzle,
   solutionDrawing,
   emptyBoard,
-} from "../src/game/engine.js";
+} from "../src/games/shapeit/game/engine.js";
 const require = createRequire(import.meta.url);
 async function component(path, name) {
   const output = await build({
@@ -27,6 +27,7 @@ async function component(path, name) {
     platform: "node",
     jsx: "automatic",
     logLevel: "silent",
+    loader: { ".css": "empty" },
     plugins: [
       {
         name: "shared-react",
@@ -69,11 +70,20 @@ Object.defineProperty(globalThis, "navigator", {
 globalThis.requestAnimationFrame = (fn) =>
   setTimeout(() => fn(performance.now()), 16);
 globalThis.cancelAnimationFrame = clearTimeout;
-const SoloGame = await component("src/components/SoloGame.jsx", "SoloGame");
-const GameBoard = await component("src/components/GameBoard.jsx", "GameBoard");
-const QueryLog = await component("src/components/GameControls.jsx", "QueryLog");
+const SoloGame = await component(
+  "src/games/shapeit/components/SoloGame.jsx",
+  "SoloGame",
+);
+const GameBoard = await component(
+  "src/games/shapeit/components/GameBoard.jsx",
+  "GameBoard",
+);
+const QueryLog = await component(
+  "src/games/shapeit/components/GameControls.jsx",
+  "QueryLog",
+);
 const PieceList = await component(
-  "src/components/GameControls.jsx",
+  "src/games/shapeit/components/GameControls.jsx",
   "PieceList",
 );
 const config = {
@@ -261,7 +271,7 @@ test("selecting an old laser, including the same selection again, scrolls only i
 
 test("score animation reaches its final value even when background animation frames are suspended", async () => {
   const ResultDialog = await component(
-    "src/components/ResultDialog.jsx",
+    "src/games/shapeit/components/ResultDialog.jsx",
     "ResultDialog",
   );
   const raf = globalThis.requestAnimationFrame;
@@ -370,7 +380,7 @@ test("phone menu has no board-size choice and training opens without an extras d
   globalThis.location = { pathname: "/", search: "" };
   const oldAgent = navigator.userAgent;
   navigator.userAgent = "Android";
-  const App = await component("src/App.jsx", "default");
+  const App = await component("src/games/shapeit/ShapeIt.jsx", "default");
   const view = mount(App, {});
   try {
     assert.equal(
@@ -398,7 +408,7 @@ test("reload retains the training board, drawing, lasers and result/board view",
     setItem: (k, v) => tab.set(k, v),
   };
   globalThis.location = { pathname: "/", search: "" };
-  const App = await component("src/App.jsx", "default");
+  const App = await component("src/games/shapeit/ShapeIt.jsx", "default");
   let view = mount(App, {});
   try {
     act(() => button(view, "△Train mode▶").props.onClick());
@@ -442,7 +452,7 @@ test("reload retains the training board, drawing, lasers and result/board view",
 
 test("result meter marks the matching previous best and assisted results cannot claim a record", async () => {
   const ResultDialog = await component(
-    "src/components/ResultDialog.jsx",
+    "src/games/shapeit/components/ResultDialog.jsx",
     "ResultDialog",
   );
   const props = {
@@ -479,7 +489,7 @@ test("result meter marks the matching previous best and assisted results cannot 
 
 test("tutorial uses the live game's animated board and query log, including reverse-entry replays", async () => {
   const Guide = await component(
-    "src/components/HowToPlayModal.jsx",
+    "src/games/shapeit/components/HowToPlayModal.jsx",
     "HowToPlayModal",
   );
   const view = mount(Guide, {
@@ -594,8 +604,11 @@ test("solo results use only the personal best from the same mode and size", () =
   }
 });
 
-const DuelBoard = await component("src/components/DuelGame.jsx", "DuelBoard");
-const duel = await import("../src/server/duel.js");
+const DuelBoard = await component(
+  "src/games/shapeit/components/DuelGame.jsx",
+  "DuelBoard",
+);
+const duel = await import("../src/games/shapeit/server/duel.js");
 function duelFixture(mode = "turns") {
   const room = duel.createRoom(
     "2468",
@@ -803,7 +816,7 @@ test("duel sync sends changed drawings with the round identity and stops immedia
 
 test("Try game shows its target, keeps the drawing between tabs and celebrates the exact solution", async () => {
   const Guide = await component(
-    "src/components/HowToPlayModal.jsx",
+    "src/games/shapeit/components/HowToPlayModal.jsx",
     "HowToPlayModal",
   );
   const props = { onClose() {}, pieces: buildPieces(42, "compact", false) };
@@ -859,7 +872,7 @@ test("Try game shows its target, keeps the drawing between tabs and celebrates t
 });
 
 const RaceResultDialog = await component(
-  "src/components/RaceResultDialog.jsx",
+  "src/games/shapeit/components/RaceResultDialog.jsx",
   "RaceResultDialog",
 );
 test("race meters animate together, show incorrect as zero and reveal the verdict only when complete", async () => {
@@ -927,7 +940,10 @@ test("race meters animate together, show incorrect as zero and reveal the verdic
   }
 });
 
-const AdminPage = await component("src/components/AdminPage.jsx", "AdminPage");
+const AdminPage = await component(
+  "src/platform/admin/AdminPage.jsx",
+  "AdminPage",
+);
 test("admin lists distinct player IDs, searches names and requests activity for the selected player", async () => {
   const previousFetch = globalThis.fetch;
   const calls = [];
@@ -1005,6 +1021,17 @@ test("admin lists distinct player IDs, searches names and requests activity for 
       rendered.root.findByType("tbody").findAllByType("tr").length,
       2,
     );
+    await act(async () =>
+      rendered.root
+        .findByType("select")
+        .props.onChange({ target: { value: "pushit" } }),
+    );
+    assert.equal(calls.at(-1), "/api/admin/events?game=pushit");
+    await act(async () => playerList().findByType("button").props.onClick());
+    assert.equal(
+      calls.at(-1),
+      "/api/admin/events?player=player-two&game=pushit",
+    );
     act(() => button(rendered, "Sign out").props.onClick());
     assert.ok(rendered.root.findByProps({ type: "password" }));
   } finally {
@@ -1013,7 +1040,10 @@ test("admin lists distinct player IDs, searches names and requests activity for 
   }
 });
 
-const DuelGame = await component("src/components/DuelGame.jsx", "DuelGame");
+const DuelGame = await component(
+  "src/games/shapeit/components/DuelGame.jsx",
+  "DuelGame",
+);
 test("leave room works even while reconnecting and ignores a late server response", async () => {
   entries.clear();
   const previousFetch = globalThis.fetch;
@@ -1097,7 +1127,15 @@ test("race countdown locks drawing, submission and shots, then releases them at 
     );
     assert.equal(duelBoard(rendered).props.newLaserLocked, false);
     assert.equal(button(rendered, "Submit solution").props.disabled, false);
-    await act(async () => duelBoard(rendered).props.onLaser("top", 0));
+    const unused = Array.from({ length: 7 }, (_, idx) => idx).find(
+      (idx) =>
+        !duelBoard(rendered).props.queries.some(
+          (q) =>
+            (q.side === "top" && q.idx === idx) ||
+            (q.exitSide === "top" && q.exitIdx === idx),
+        ),
+    );
+    await act(async () => duelBoard(rendered).props.onLaser("top", unused));
     assert.equal(actions, 1);
   } finally {
     act(() => rendered.unmount());
@@ -1145,7 +1183,15 @@ test("eight-player random race works for the last guest and reviews each player�
     );
     assert.equal(duelBoard(rendered).props.queries.length, 1);
     assert.equal(duelBoard(rendered).props.queries[0].player, 7);
-    await act(async () => duelBoard(rendered).props.onLaser("top", 0));
+    const unused = Array.from({ length: 7 }, (_, idx) => idx).find(
+      (idx) =>
+        !duelBoard(rendered).props.queries.some(
+          (q) =>
+            (q.side === "top" && q.idx === idx) ||
+            (q.exitSide === "top" && q.exitIdx === idx),
+        ),
+    );
+    await act(async () => duelBoard(rendered).props.onLaser("top", unused));
     assert.equal(actions, 1);
     for (let i = 0; i < 8; i++)
       duel.applyAction(

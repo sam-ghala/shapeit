@@ -5,19 +5,19 @@ import TestRenderer, { act } from "react-test-renderer";
 import { build } from "esbuild";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { createGame } from "../src/pushit/engine.js";
+import { createGame } from "../src/games/pushit/engine.js";
 import {
   createPushRoom,
   joinPushRoom,
   pushRoomView,
   applyPushAction,
-} from "../src/pushit/rooms.js";
+} from "../src/games/pushit/rooms.js";
 
-import { newMatch } from "../src/pushit/match.js";
+import { newMatch } from "../src/games/pushit/match.js";
 
 const require = createRequire(import.meta.url);
 const bundle = await build({
-  entryPoints: ["src/pushit/PushIt.jsx"],
+  entryPoints: ["src/games/pushit/PushIt.jsx"],
   bundle: true,
   write: false,
   format: "esm",
@@ -278,7 +278,7 @@ test("local rotation waits a full second, animates 180 degrees, then unlocks the
   );
 });
 
-test("a winning push animates the ejected piece before the result; undo restores series score", async () => {
+test("a winning push leads through separate round and series results back to the local lobby", async () => {
   const time = clock(),
     m = fixture(3);
   m.wins.black = 1;
@@ -292,18 +292,22 @@ test("a winning push animates the ejected piece before the result; undo restores
   assert.equal(view.root.findAllByType("dialog").length, 0);
   await time.tick(1100);
   assert.ok(aria(view, "Black wins!"));
-  assert.ok(text(view.root).includes("SERIES WON"));
-  await click(view, "Undo");
-  assert.equal(saved().wins.black, 1);
-  assert.equal(saved().phase, "playing");
-  assert.equal(saved().game.winner, null);
-  select(view, "b1");
-  await forward(view);
-  await time.tick(1100);
-  await click(view, "New series →");
+  assert.equal(button(view, "Undo"), undefined);
+  assert.equal(
+    view.root.findAllByProps({ "aria-label": "Undo action" }).length,
+    0,
+  );
+  await click(view, "Series result →");
+  assert.ok(aria(view, "Black takes the series!"));
+  assert.ok(text(view.root).includes("CHAMPION"));
+  await click(view, "Back to lobby →");
+  assert.equal(saved().phase, "lobby");
+  assert.ok(button(view, "Start match →"));
+  await click(view, "Best of 5");
+  await click(view, "Start match →");
   assert.deepEqual(saved().wins, { black: 0, white: 0 });
   assert.equal(saved().round, 1);
-  assert.equal(saved().bestOf, 3);
+  assert.equal(saved().bestOf, 5);
 });
 
 test("free-play points and completed results survive reload without counting a win twice", async () => {
@@ -440,12 +444,27 @@ test("online views keep each player's color at the bottom and require approval f
   }
 });
 
-test("the opponent can decline or approve undo and pending requests hide a result dialog", async () => {
+test("the opponent can decline or approve an undo while the round is playing", async () => {
+  const { r, view, poll } = await online({ index: 1 });
+  const before = structuredClone(r.game);
+  applyPushAction(r, 0, { type: "left", pieceId: "b1", revision: r.revision });
+  applyPushAction(r, 0, { type: "undo", revision: r.revision });
+  await poll();
+  assert.ok(button(view, "Allow undo"));
+  await click(view, "Decline");
+  assert.notDeepEqual(r.game, before);
+  applyPushAction(r, 0, { type: "undo", revision: r.revision });
+  await poll();
+  await click(view, "Allow undo");
+  assert.deepEqual(r.game, before);
+});
+
+test("online series results return each player to the lobby and await the opponent", async () => {
   const time = clock(),
-    { r, view, poll } = await online({ index: 1 });
-  const winner = fixture();
-  r.game = winner.game;
-  r.starter = "black";
+    { r, view, poll } = await online();
+  r.bestOf = 3;
+  r.wins.black = 1;
+  r.game = fixture().game;
   applyPushAction(r, 0, {
     type: "forward",
     pieceId: "b1",
@@ -454,18 +473,71 @@ test("the opponent can decline or approve undo and pending requests hide a resul
   await poll();
   await time.tick(1100);
   assert.ok(aria(view, "Host wins!"));
-  applyPushAction(r, 0, { type: "undo", revision: r.revision });
+  await click(view, "Series result →");
+  assert.ok(aria(view, "Host takes the series!"));
+  await click(view, "Back to lobby →");
+  assert.ok(text(view.root).includes("viewing the series result"));
+  assert.equal(aria(view, "Play as White").props.disabled, true);
+  applyPushAction(r, 1, { type: "return-lobby", revision: r.revision });
   await poll();
-  assert.equal(view.root.findAllByType("dialog").length, 0);
-  assert.ok(button(view, "Allow undo"));
-  await click(view, "Decline");
-  assert.equal(r.game.winner, "black");
-  applyPushAction(r, 0, { type: "undo", revision: r.revision });
-  await poll();
-  await click(view, "Allow undo");
-  assert.equal(r.game.winner, null);
-  assert.equal(r.wins.black, 0);
+  assert.equal(button(view, "Start match →").props.disabled, false);
+  await press(view, "Play as White");
+  assert.equal(r.players[0].color, "white");
+  await click(view, "Start match →");
   assert.equal(r.phase, "playing");
+  assert.deepEqual(r.wins, { black: 0, white: 0 });
+});
+
+test("lobby guests see their assigned color without color selection controls", async () => {
+  const { view } = await online({ index: 1, phase: "lobby" });
+  assert.equal(
+    view.root.findAllByProps({ "aria-label": "Your color" }).length,
+    0,
+  );
+  assert.ok(text(view.root).includes("White"));
+});
+
+test("auto-rotation defaults on, can be unchecked, and a local game can be left", async () => {
+  clean();
+  local.set("pushit:match:v2", JSON.stringify(newMatch()));
+  session.set("pushit:view", JSON.stringify("local"));
+  const view = render();
+  const checkbox = () => view.root.findByProps({ type: "checkbox" });
+  assert.equal(checkbox().props.checked, true);
+  act(() => checkbox().props.onChange({ target: { checked: false } }));
+  assert.equal(checkbox().props.checked, false);
+  assert.equal(JSON.parse(local.get("pushit:rotate-board")), false);
+  await press(view, "Leave game");
+  assert.ok(aria(view, "Leave game?"));
+  await click(view, "Leave");
+  assert.equal(saved(), null);
+  assert.equal(JSON.parse(local.get("pushit:local:v1")), null);
+  assert.ok(button(view, "Same device"));
+});
+
+test("rotation controls stay left and right relative to the piece in both perspectives", async () => {
+  for (const perspective of ["white", "black"]) {
+    for (let facing = 0; facing < 4; facing++) {
+      const m = newMatch(0, perspective);
+      m.game.pieces.find((p) => p.id === `${perspective[0]}1`).facing = facing;
+      const view = mount(m, true);
+      select(view, `${perspective[0]}1`);
+      const control = view.root.findByProps({
+        className: "push-orbit-controls",
+      });
+      assert.equal(
+        control.props.style.transform,
+        `rotate(${facing * 90 + (perspective === "black" ? 180 : 0)}deg)`,
+      );
+      await press(view, "Rotate left 90°");
+      assert.equal(
+        saved().game.pieces.find((p) => p.id === `${perspective[0]}1`).facing,
+        (facing + 3) % 4,
+      );
+      act(() => view.unmount());
+      roots.delete(view);
+    }
+  }
 });
 
 test("online turn changes never rotate a fixed player perspective", async () => {
@@ -525,4 +597,23 @@ test("an empty-name invitation opens the name popup before joining", () => {
   const view = render();
   assert.ok(aria(view, "Your name"));
   assert.equal(called, false);
+});
+
+test("quickly toggling auto-rotation back cancels the animation lock", async () => {
+  const time = clock(),
+    view = mount(newMatch(0, "black"), true);
+  const checkbox = () => view.root.findByProps({ type: "checkbox" });
+  act(() => checkbox().props.onChange({ target: { checked: false } }));
+  act(() => checkbox().props.onChange({ target: { checked: true } }));
+  await time.tick(500);
+  assert.equal(
+    view.root.findByProps({ className: "push-board-stage" }).props[
+      "data-rotating"
+    ],
+    false,
+  );
+  assert.equal(
+    view.root.findByProps({ "data-piece-id": "b1" }).props.disabled,
+    false,
+  );
 });

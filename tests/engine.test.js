@@ -19,7 +19,7 @@ import {
   calcScore,
   rotateCells,
   mirrorCells,
-} from "../src/game/engine.js";
+} from "../src/games/shapeit/game/engine.js";
 
 test("compact shapes have distinct rotation/reflection classes", () => {
   assert.equal(

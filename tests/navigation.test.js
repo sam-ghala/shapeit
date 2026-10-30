@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { restoreNavigation, writeTabState } from "../src/game/navigation.js";
+import {
+  restoreNavigation,
+  writeTabState,
+} from "../src/games/shapeit/game/navigation.js";
 
 test("reload resumes valid solo routes and dialogs; phones stay compact and direct links take priority", () => {
   const saved = new Map();

@@ -4,7 +4,7 @@ import {
   generatePuzzle,
   emptyBoard,
   calcScore,
-} from "../src/game/engine.js";
+} from "../src/games/shapeit/game/engine.js";
 const base = process.env.TEST_BASE_URL || "http://127.0.0.1:8787";
 const adminKey = process.env.TEST_ADMIN_KEY || "local-test-only";
 let calls = 0;

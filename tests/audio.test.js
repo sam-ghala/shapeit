@@ -6,7 +6,7 @@ import {
   resultProgress,
   setSoundEnabled,
   playSound,
-} from "../src/game/audio.js";
+} from "../src/shared/audio.js";
 
 test("Safari unlock, meter milestones, loss tones, mute and cancellation share one audio lifecycle", async () => {
   let audio,

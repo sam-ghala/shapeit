@@ -8,8 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.js",
-    "format": "prettier --write src tests index.html vite.config.js package.json README.md",
-    "format:check": "prettier --check src tests index.html vite.config.js package.json README.md",
+    "format": "prettier --write src tests index.html vite.config.js package.json README.md AGENTS.md",
+    "format:check": "prettier --check src tests index.html vite.config.js package.json README.md AGENTS.md",
     "dev:server": "wrangler dev --port 8787",
     "deploy": "npm run build && wrangler deploy"
   },

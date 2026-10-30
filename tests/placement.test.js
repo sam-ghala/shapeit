@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { previewPlacement } from "../src/game/placement.js";
+import { previewPlacement } from "../src/games/shapeit/game/placement.js";
 import {
   buildPieces,
   rotateCells,
   validatePlacements,
-} from "../src/game/engine.js";
+} from "../src/games/shapeit/game/engine.js";
 test("placement preview uses the selected orientation and rejects overlaps and off-board drops", () => {
   const pieces = buildPieces("placement", "compact");
   const piece = pieces[0],

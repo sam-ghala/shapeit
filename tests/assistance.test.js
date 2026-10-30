@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nextPencilColor, trainingHint } from "../src/game/assistance.js";
-import { emptyBoard, solutionDrawing } from "../src/game/engine.js";
+import {
+  nextPencilColor,
+  trainingHint,
+} from "../src/games/shapeit/game/assistance.js";
+import {
+  emptyBoard,
+  solutionDrawing,
+} from "../src/games/shapeit/game/engine.js";
 const pieces = [
   { id: "red", color: "red", name: "Triangle", cells: [[0, 0, "/"]] },
   { id: "blue", color: "blue", name: "Triangle", cells: [[0, 0, "/"]] },
@@ -73,7 +79,7 @@ test("training hints progress from region to position to outline, then next piec
 });
 
 test("duel device classification does not treat a narrow desktop as a phone", async () => {
-  const { mobilePlayer } = await import("../src/game/device.js");
+  const { mobilePlayer } = await import("../src/shared/device.js");
   assert.equal(
     mobilePlayer({
       userAgent: "Mozilla/5.0 (Macintosh) Safari",

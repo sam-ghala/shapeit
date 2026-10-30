@@ -5,14 +5,14 @@ import {
   readScores,
   personalBests,
   importSavedResults,
-} from "../src/game/scores.js";
+} from "../src/games/shapeit/game/scores.js";
 import {
   createSession,
   getProfile,
   sessionKey,
   writeJSON,
   loadSession,
-} from "../src/game/storage.js";
+} from "../src/games/shapeit/game/storage.js";
 const entries = new Map();
 globalThis.localStorage = {
   getItem: (k) => entries.get(k) ?? null,

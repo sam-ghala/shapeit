@@ -43,19 +43,19 @@
   </head>
   <body>
     <script type="module">
-      import "/src/index.css";
-      import "/src/pushit/pushit.css";
+      import "/src/shared/theme.css";
+      import "/src/games/pushit/pushit.css";
       import React from "react";
       import { createRoot } from "react-dom/client";
-      import { PushIt, Rules } from "/src/pushit/PushIt.jsx";
-      import { createGame } from "/src/pushit/engine.js";
-      import { newMatch } from "/src/pushit/match.js";
+      import { PushIt, Rules } from "/src/games/pushit/PushIt.jsx";
+      import { createGame } from "/src/games/pushit/engine.js";
+      import { newMatch } from "/src/games/pushit/match.js";
       import {
         createPushRoom,
         joinPushRoom,
         applyPushAction,
         pushRoomView,
-      } from "/src/pushit/rooms.js";
+      } from "/src/games/pushit/rooms.js";
       const params = new URLSearchParams(location.search);
       const sizes = [
         [320, 568],

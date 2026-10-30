@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createGame } from "../src/pushit/engine.js";
+import { createGame } from "../src/games/pushit/engine.js";
 import {
   newMatch,
   playMatch,
   nextRound,
   undoMatch,
   restoreLocalMatch,
-} from "../src/pushit/match.js";
-import { upgradePushRoom, pushRoomView } from "../src/pushit/rooms.js";
+} from "../src/games/pushit/match.js";
+import { upgradePushRoom, pushRoomView } from "../src/games/pushit/rooms.js";
 
 test("local undo restores complete turns and scores without approval", () => {
   const m = newMatch(3, "black"),

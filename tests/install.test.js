@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createInstallStore } from "../src/game/install.js";
+import { createInstallStore } from "../src/games/shapeit/game/install.js";
 function environment(standalone = false) {
   const win = new EventTarget();
   const display = new EventTarget();

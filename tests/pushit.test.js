@@ -5,13 +5,13 @@ import {
   createGame,
   forwardMove,
   validGame,
-} from "../src/pushit/engine.js";
+} from "../src/games/pushit/engine.js";
 import {
   applyPushAction,
   createPushRoom,
   joinPushRoom,
   pushRoomView,
-} from "../src/pushit/rooms.js";
+} from "../src/games/pushit/rooms.js";
 
 const profile = (id) => ({ id: `pushit-player-${id}`, name: `Player ${id}` });
 const piece = (id, x, y, facing) => ({
@@ -204,7 +204,7 @@ test("rooms require a name, begin in a lobby, and do not start on joining", () =
   assert.throws(() => send(r, 1, { type: "start" }), /host/);
 });
 
-test("both lobby players can switch colors, but only the host sets the odd series length", () => {
+test("only the host can switch colors and set the odd series length", () => {
   const r = createPushRoom("0123", profile(1));
   send(r, 0, { type: "color", color: "white" });
   joinPushRoom(r, profile(2));
@@ -212,7 +212,8 @@ test("both lobby players can switch colors, but only the host sets the odd serie
     r.players.map((p) => p.color),
     ["white", "black"],
   );
-  send(r, 1, { type: "color", color: "white" });
+  assert.throws(() => send(r, 1, { type: "color", color: "white" }), /host/);
+  send(r, 0, { type: "color", color: "black" });
   assert.deepEqual(
     r.players.map((p) => p.color),
     ["black", "white"],
@@ -285,21 +286,24 @@ test("undo freezes play and requires the opponent's approval, including after th
   assert.equal(r.game.used, 1);
 });
 
-test("an approved undo of a winning move also restores scores and a completed series", () => {
+test("finished games cannot be undone, including the final round of a series", () => {
   const r = room(3);
-  win(r, "black");
-  next(r);
-  win(r, "black");
+  for (let round = 0; round < 2; round++) {
+    win(r, "black");
+    assert.equal(r.wins.black, round + 1);
+    for (let i = 0; i < 2; i++) {
+      assert.equal(pushRoomView(r, i).canUndo, false);
+      assert.throws(() => send(r, i, { type: "undo" }), /latest move/);
+      assert.throws(
+        () => send(r, i, { type: "undo-response", accept: true }),
+        /approve/,
+      );
+    }
+    assert.equal(r.undoStack.length, 0);
+    if (!round) next(r);
+  }
   assert.equal(r.phase, "complete");
   assert.equal(r.matchWinner, "black");
-  assert.equal(r.wins.black, 2);
-  const winner = r.players.findIndex((p) => p.color === "black");
-  send(r, winner, { type: "undo" });
-  send(r, 1 - winner, { type: "undo-response", accept: true });
-  assert.equal(r.phase, "playing");
-  assert.equal(r.game.winner, null);
-  assert.equal(r.wins.black, 1);
-  assert.equal(r.matchWinner, null);
 });
 
 test("free play keeps scores, alternates starters and waits for both rematch votes", () => {
@@ -321,7 +325,7 @@ test("free play keeps scores, alternates starters and waits for both rematch vot
   assert.equal(r.matchWinner, null);
 });
 
-test("best-of 3, 5, 7 and 15 end at the required wins and a new series needs both players", () => {
+test("best-of 3, 5, 7 and 15 return to the lobby before the host starts a fresh series", () => {
   for (const bestOf of [3, 5, 7, 15]) {
     const r = room(bestOf),
       target = (bestOf + 1) / 2;
@@ -333,9 +337,15 @@ test("best-of 3, 5, 7 and 15 end at the required wins and a new series needs bot
     }
     assert.equal(r.matchWinner, "white");
     assert.throws(() => send(r, 0, { type: "rematch" }), /not available/);
-    send(r, 0, { type: "new-series" });
+    send(r, 0, { type: "return-lobby" });
     assert.equal(r.phase, "complete");
-    send(r, 1, { type: "new-series" });
+    assert.deepEqual(r.lobbyReady, [0]);
+    assert.throws(() => send(r, 0, { type: "start" }), /host/);
+    send(r, 1, { type: "return-lobby" });
+    assert.equal(r.phase, "lobby");
+    assert.equal(r.wins.white, target);
+    send(r, 0, { type: "color", color: "white" });
+    send(r, 0, { type: "start" });
     assert.equal(r.phase, "playing");
     assert.equal(r.round, 1);
     assert.deepEqual(r.wins, { black: 0, white: 0 });
