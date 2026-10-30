@@ -1,3 +1,4 @@
+import { PanelHeading } from "../../shared/components/PanelHeading.jsx";
 import { queueEvent } from "../../shared/activity.js";
 import { useProfile } from "../../shared/useProfile.js";
 import { gameHref, gamePath } from "../../platform/routing.js";
@@ -735,6 +736,7 @@ export function PushIt() {
           <h1>
             Push<span>It</span>
           </h1>
+          <p>1 vs 1 · Two players only</p>
         </div>
         <nav className="push-home-modes" aria-label="PushIt game modes">
           <button
@@ -779,7 +781,10 @@ export function PushIt() {
       <main className="push-app">
         {header}
         <section className="push-connect card">
-          <h2>{credentials ? "Reconnecting…" : "Play a friend"}</h2>
+          <PanelHeading
+            title={credentials ? "Reconnecting…" : "Play a friend"}
+            onClose={home}
+          />
           {credentials ? (
             <button onClick={() => service.forget()}>Use another room</button>
           ) : (
@@ -824,7 +829,13 @@ export function PushIt() {
       <main className="push-app">
         {header}
         <section className="push-connect card">
-          <h2>Room closed</h2>
+          <PanelHeading
+            title="Room closed"
+            onClose={() => {
+              service.forget();
+              home();
+            }}
+          />
           <p>{room.left} left.</p>
           <button
             className="primary"
@@ -844,7 +855,11 @@ export function PushIt() {
       <main className="push-app">
         {header}
         <section className="push-lobby push-local-lobby card">
-          <h2>Same device</h2>
+          <PanelHeading
+            title="Same device"
+            onClose={home}
+            className="push-lobby-heading"
+          />
           <div className="push-local-seats">
             <span>
               <i className="push-color-dot black" />
@@ -869,12 +884,15 @@ export function PushIt() {
       <main className="push-app">
         {header}
         <section className="push-lobby card">
-          <div className="push-lobby-heading">
-            <h2>Room {room.code}</h2>
+          <PanelHeading
+            title={`Room ${room.code}`}
+            onClose={home}
+            className="push-lobby-heading"
+          >
             <button onClick={copyLink}>
               {copied ? "Copied ✓" : "Invite friend ↗"}
             </button>
-          </div>
+          </PanelHeading>
           <div className="push-lobby-players">
             {[0, 1].map((index) => {
               const p = room.players[index];

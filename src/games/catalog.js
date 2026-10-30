@@ -11,6 +11,7 @@ export const GAMES = [
   },
   {
     id: "pushit",
+    isNew: true,
     name: "PushIt",
     icon: "↟",
     status: "ready",
@@ -19,6 +20,7 @@ export const GAMES = [
   },
   {
     id: "chessit",
+    listed: false,
     name: "ChessIt",
     icon: "♞",
     status: "coming-soon",

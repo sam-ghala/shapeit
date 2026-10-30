@@ -528,7 +528,7 @@ body:has(.arcade-menu) {
   gap: 14px;
   flex: 0 1 330px;
   min-height: 0;
-  grid-template-rows: repeat(3, minmax(64px, 1fr));
+  grid-template-rows: minmax(88px, 1fr) repeat(2, minmax(64px, 1fr));
 }
 .menu-shortcuts {
   display: flex;
@@ -1889,5 +1889,39 @@ html {
   }
   .race-title-short {
     display: inline;
+  }
+}
+
+/* Keep the title and daily status centered together, even in short menu rows. */
+.arcade-menu .daily-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: 4px;
+}
+.arcade-menu .daily-copy strong {
+  line-height: 1.1;
+}
+.arcade-menu .daily-copy small {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.2;
+}
+.arcade-menu .daily-copy small::before {
+  flex: none;
+  margin: 0;
+}
+@media (max-height: 620px) {
+  .arcade-modes {
+    grid-template-rows: minmax(76px, 1fr) repeat(2, minmax(64px, 1fr));
+  }
+}
+@media (max-width: 380px) {
+  .arcade-menu .daily-copy small {
+    font-size: 12px;
   }
 }

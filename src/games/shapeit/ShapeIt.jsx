@@ -174,7 +174,7 @@ export default function ShapeIt() {
           <span className="mode-icon" aria-hidden="true">
             ◈
           </span>
-          <span>
+          <span className="daily-copy">
             <strong>Daily puzzle</strong>
             <small>{status}</small>
           </span>

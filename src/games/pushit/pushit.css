@@ -1549,3 +1549,23 @@ body:has(.push-home) {
     height: 95px;
   }
 }
+
+.push-home-title p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 750;
+}
+@media (max-width: 380px) {
+  .push-lobby-heading .panel-heading-actions {
+    gap: 2px;
+  }
+  .push-lobby-heading .panel-heading-actions > button:not(.panel-close) {
+    font-size: 11px;
+    padding: 5px;
+  }
+  .push-lobby-heading .panel-close {
+    width: 40px;
+  }
+}

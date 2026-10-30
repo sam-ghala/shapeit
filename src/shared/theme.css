@@ -430,3 +430,54 @@ body,
   place-items: center;
   font-weight: 800;
 }
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.panel-heading h2 {
+  min-width: 0;
+}
+.panel-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.panel-heading .panel-close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  font-size: 21px;
+}
+.panel-heading .panel-close:hover {
+  background: var(--soft);
+}
+.game-links-compact a {
+  min-height: 30px;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.game-new-badge {
+  display: inline-block;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  padding: 1px 5px;
+  background: var(--coral);
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
