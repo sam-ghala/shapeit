@@ -10,11 +10,10 @@ import {
   coordinate,
   createGame,
   describeAction,
-  DIRECTIONS,
   forwardMove,
-  RULEBOOK,
   validGame,
 } from "./engine.js";
+import { PushBoard, PushPiece } from "./PushBoard.jsx";
 import "./pushit.css";
 
 const titleCase = (value) => value[0].toUpperCase() + value.slice(1);
@@ -22,74 +21,6 @@ const savedGame = () => {
   const saved = readJSON("pushit:local:v1", null);
   return validGame(saved) ? saved : null;
 };
-
-export function PushPiece({ color, facing = 0 }) {
-  return (
-    <span
-      className={`push-piece ${color}`}
-      style={{ "--facing": `${facing * 90}deg` }}
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 64 64" fill="none">
-        <circle cx="32" cy="13" r="5" fill="currentColor" />
-        <path
-          d="M32 23v28M22 33l10-10 10 10M21 44h22"
-          stroke="currentColor"
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
-
-export function PushBoard({
-  game,
-  selected,
-  onSelect,
-  onForward,
-  interactive = false,
-  small = false,
-}) {
-  const move = selected ? forwardMove(game, selected) : null;
-  const destination = interactive && move?.legal ? move.destination : null;
-  return (
-    <div className={`push-board-frame ${small ? "push-board-small" : ""}`}>
-      <div className="push-board" role="group" aria-label="PushIt 4 by 4 board">
-        {Array.from({ length: 16 }, (_, i) => {
-          const x = i % 4,
-            y = Math.floor(i / 4);
-          const piece = game.pieces.find((p) => p.x === x && p.y === y);
-          const target = destination?.[0] === x && destination?.[1] === y;
-          const active = interactive && piece?.color === game.current;
-          const label = `${coordinate(x, y)}${piece ? `, ${piece.color}, facing ${DIRECTIONS[piece.facing]}` : ", empty"}${target ? ", move here" : ""}`;
-          return (
-            <button
-              key={i}
-              className={`push-cell ${(x + y) % 2 ? "tinted" : ""} ${piece?.id === selected ? "selected" : ""} ${target ? "destination" : ""}`}
-              aria-label={label}
-              aria-pressed={piece ? piece.id === selected : undefined}
-              disabled={!active && !target}
-              title={label}
-              onClick={() => (target ? onForward() : onSelect(piece.id))}
-            >
-              <span className="push-cell-coordinate" aria-hidden="true">
-                {coordinate(x, y)}
-              </span>
-              {piece && <PushPiece color={piece.color} facing={piece.facing} />}
-              {target && (
-                <span className="push-target" aria-hidden="true">
-                  {piece ? "⇢" : "+"}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function Rules({ onClose }) {
   return (
@@ -150,12 +81,6 @@ function Rules({ onClose }) {
         even before your third action. Removing your own piece does not count as
         a win. If both players agree the position is stuck, reset together.
       </p>
-      <p className="muted small">
-        Rules based on DUAT by Caleb Carvalho, published by Unphazed Games.{" "}
-        <a href={RULEBOOK} target="_blank" rel="noreferrer">
-          Read the official 2026 rulebook ↗
-        </a>
-      </p>
       <button className="primary" onClick={onClose}>
         Got it · let’s play
       </button>
@@ -204,6 +129,9 @@ export function PushIt() {
   const [code, setCode] = useState(initialCode);
   const [starter, setStarter] = useState("black");
   const [hostColor, setHostColor] = useState("black");
+  const [rotateBoard, setRotateBoard] = useState(
+    () => readJSON("pushit:rotate-board", false) === true,
+  );
   const [selected, setSelected] = useState(null);
   const [undo, setUndo] = useState([]);
   const [rules, setRules] = useState(false);
@@ -223,16 +151,54 @@ export function PushIt() {
   const game = online ? room?.game : local;
   const playing = online ? room?.phase === "playing" : !!game && !game.winner;
   const myColor = online ? room?.players[room.you]?.color : game?.current;
-  const canPlay = playing && !busy && (!online || game.current === myColor);
+  const isMyTurn = playing && (!online || game.current === myColor);
+  const canPlay = isMyTurn && !busy;
+  const perspective = online
+    ? myColor || "white"
+    : rotateBoard
+      ? game?.current || "white"
+      : "white";
   const chosen = game?.pieces.find((p) => p.id === selected);
   const move = chosen ? forwardMove(game, chosen.id) : null;
   const playerName = (color) =>
     online
       ? room?.players.find((p) => p.color === color)?.name || titleCase(color)
       : titleCase(color);
+  const turnLabel = game?.winner
+    ? `${playerName(game.winner)} wins!`
+    : online && room?.phase === "waiting"
+      ? "Waiting for your friend"
+      : online
+        ? isMyTurn
+          ? "Your turn"
+          : "Opponent’s turn"
+        : game
+          ? `${playerName(game.current)} to play`
+          : "";
+
+  const lastTurn = useRef(null);
+  useEffect(() => {
+    const turnId =
+      online && playing ? `${room.id}:${room.round}:${game.turn}` : null;
+    if (turnId && lastTurn.current !== turnId && isMyTurn) playSound("turn");
+    lastTurn.current = turnId;
+    document.title =
+      screen !== "menu" && game
+        ? `${turnLabel} · PushIt`
+        : "PushIt · A game of one or three";
+  }, [
+    online,
+    playing,
+    isMyTurn,
+    game?.turn,
+    game?.winner,
+    room?.id,
+    room?.round,
+    screen,
+    turnLabel,
+  ]);
 
   useEffect(() => {
-    document.title = "PushIt · A game of one or three";
     const meta = document.querySelector('meta[name="description"]');
     if (meta)
       meta.content =
@@ -241,6 +207,9 @@ export function PushIt() {
   useEffect(() => {
     writeTabState("pushit:view", screen);
   }, [screen]);
+  useEffect(() => {
+    writeJSON("pushit:rotate-board", rotateBoard);
+  }, [rotateBoard]);
   useEffect(() => {
     if (local) writeJSON("pushit:local:v1", local);
   }, [local]);
@@ -636,13 +605,7 @@ export function PushIt() {
         <p className="push-menu-objective">
           Push one opposing piece off the board to win.
         </p>
-        <footer className="menu-credit">
-          Robin &amp; Sam · Based on{" "}
-          <a href={RULEBOOK} target="_blank" rel="noreferrer">
-            DUAT
-          </a>{" "}
-          by Caleb Carvalho
-        </footer>
+        <footer className="menu-credit">Robin &amp; Sam</footer>
         {overlays}
       </main>
     );
@@ -807,11 +770,36 @@ export function PushIt() {
       )}
       <div className="push-play-layout">
         <section className="push-board-panel">
+          <div
+            key={`${room?.round || 0}:${game.turn}:${game.winner || "playing"}`}
+            className={`push-turn-banner ${playing ? (isMyTurn ? "is-yours" : "is-waiting") : ""}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span
+              className={`push-turn-marker ${game.winner || game.current}`}
+              aria-hidden="true"
+            />
+            <div>
+              <strong>{turnLabel}</strong>
+              <span>
+                {game.winner
+                  ? "The final push!"
+                  : `${online ? `${playerName(game.current)} · ${titleCase(game.current)} · ` : ""}Turn ${game.turn}`}
+              </span>
+            </div>
+            {playing && (
+              <span className="push-turn-state">
+                {isMyTurn ? "PLAY" : "WAIT"}
+              </span>
+            )}
+          </div>
           <div className="push-players">
             {["black", "white"].map((color) => (
               <div
                 key={color}
-                className={`push-player ${game.current === color && !game.winner ? "active" : ""} ${color}`}
+                className={`push-player ${playing && game.current === color ? "active" : ""} ${color}`}
               >
                 <span
                   className={`push-player-dot ${color}`}
@@ -827,9 +815,9 @@ export function PushIt() {
                     {online ? ` · ${room.wins[color]} wins` : ""}
                   </small>
                 </span>
-                {game.current === color && !game.winner && (
+                {playing && game.current === color && (
                   <span className="push-turn-arrow" aria-label="Current turn">
-                    ◀
+                    Playing
                   </span>
                 )}
               </div>
@@ -839,11 +827,13 @@ export function PushIt() {
             game={game}
             selected={selected}
             interactive={canPlay}
+            perspective={perspective}
             onSelect={(id) => {
               setSelected(id);
               setError("");
             }}
             onForward={() => takeAction("forward")}
+            onRotate={takeAction}
           />
           <p className="push-board-caption">
             <span aria-hidden="true">●</span> The sun marks the front. A piece’s
@@ -851,7 +841,9 @@ export function PushIt() {
           </p>
         </section>
         <aside className="push-sidebar">
-          <section className="card push-turn-card" aria-live="polite">
+          <section
+            className={`card push-turn-card ${isMyTurn ? "is-yours" : ""}`}
+          >
             <span className="push-eyebrow">
               {game.winner ? "GAME OVER" : `TURN ${game.turn}`}
             </span>
@@ -860,9 +852,7 @@ export function PushIt() {
                 ? `${playerName(game.winner)} wins!`
                 : online && room.phase === "waiting"
                   ? "Ready when you are."
-                  : canPlay
-                    ? `${playerName(game.current)} to play`
-                    : `${playerName(game.current)}’s turn`}
+                  : turnLabel}
             </h2>
             {!game.winner && (
               <>
@@ -910,36 +900,13 @@ export function PushIt() {
               </h3>
               <p className="small muted">
                 {chosen && canPlay
-                  ? `Facing ${DIRECTIONS[chosen.facing]}. Each button uses one action.`
+                  ? "Tap a curved arrow to rotate, or the highlighted square to move."
                   : online && room.phase === "waiting"
                     ? "The game starts when your friend joins."
                     : canPlay
-                      ? "Tap a piece, then rotate or move it."
+                      ? "Tap a piece to show its rotation arrows and forward square."
                       : "Your opponent’s moves appear here."}
               </p>
-              <div className="push-rotate-controls">
-                <button
-                  disabled={!canPlay || !chosen}
-                  onClick={() => takeAction("left")}
-                >
-                  <span aria-hidden="true">↶</span> Left 90°
-                </button>
-                <button
-                  disabled={!canPlay || !chosen}
-                  onClick={() => takeAction("right")}
-                >
-                  <span aria-hidden="true">↷</span> Right 90°
-                </button>
-              </div>
-              <button
-                className="primary push-forward"
-                disabled={!canPlay || !move?.legal}
-                onClick={() => takeAction("forward")}
-              >
-                {move?.pushed?.length
-                  ? `⇢ Push ${move.pushed.length} ${move.pushed.length === 1 ? "piece" : "pieces"}`
-                  : "↑ Move forward"}
-              </button>
               {canPlay && chosen && !move?.legal && (
                 <p className="push-blocked">{move.reason}</p>
               )}
@@ -964,6 +931,22 @@ export function PushIt() {
                 </button>
               )}
             </section>
+          )}
+          {!online && (
+            <label className="push-board-setting">
+              <input
+                type="checkbox"
+                checked={rotateBoard}
+                onChange={(e) => {
+                  setRotateBoard(e.target.checked);
+                  setSelected(null);
+                }}
+              />
+              <span>
+                Rotate board after each turn
+                <small>Keep the active player’s side at the bottom.</small>
+              </span>
+            </label>
           )}
           {online && room.reset.length > 0 && (
             <div className="card push-reset-offer">

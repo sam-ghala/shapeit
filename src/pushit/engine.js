@@ -1,7 +1,4 @@
-// DUAT, English 2026 rulebook: https://unphazedgames.com/s/Duat-Rulebook-2026-Web.pdf
 // Directions run clockwise from north. The sun/front faces in this direction.
-export const RULEBOOK =
-  "https://unphazedgames.com/s/Duat-Rulebook-2026-Web.pdf";
 export const DIRECTIONS = ["north", "east", "south", "west"];
 const STEPS = [
   [0, -1],

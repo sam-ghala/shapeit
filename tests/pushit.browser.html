@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PushIt browser regression checks</title>
+    <style>
+      body {
+        margin: 0;
+        background: #fff8e8;
+        font: 14px system-ui;
+        color: #263646;
+      }
+      nav {
+        padding: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      iframe {
+        display: block;
+        margin: 0 auto;
+        border: 1px solid #bbb;
+        max-width: 100%;
+      }
+      *,
+      *::before,
+      *::after {
+        transition: none !important;
+        animation: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import React, { useEffect, useRef, useState } from "react";
+      import { createRoot } from "react-dom/client";
+      import { PushBoard } from "/src/pushit/PushBoard.jsx";
+      import { createGame, act } from "/src/pushit/engine.js";
+      import "/src/index.css";
+      import "/src/pushit/pushit.css";
+
+      // Open this file through Vite. All layout checks run in Safari's own CSS engine.
+      const params = new URLSearchParams(location.search);
+      const width = Number(params.get("width")) || 390;
+      if (!params.has("frame")) {
+        const nav = document.createElement("nav");
+        for (const size of [320, 390, 430, 1000]) {
+          const a = document.createElement("a");
+          a.href = `?width=${size}`;
+          a.textContent = `${size}px viewport`;
+          nav.append(a);
+        }
+        const app = document.createElement("a");
+        app.href = "/pushit";
+        app.textContent = "Open game";
+        nav.append(app);
+        const frame = document.createElement("iframe");
+        frame.title = "PushIt layout tests";
+        frame.src = `?width=${width}&frame=1`;
+        frame.width = width;
+        frame.height = 1050;
+        document.body.append(nav, frame);
+      } else {
+        const initial = createGame();
+        const cases = [{ name: "Initial setup", game: initial }];
+        for (let row = 0; row < 4; row++) {
+          const g = createGame();
+          const occupied = new Set(
+            g.pieces.filter((p) => p.y !== row).map((p) => `${p.x},${p.y}`),
+          );
+          for (const p of g.pieces.filter((p) => p.y === row)) {
+            for (let i = 0; i < 16; i++) {
+              const x = i % 4,
+                y = Math.floor(i / 4);
+              if (y !== row && !occupied.has(`${x},${y}`)) {
+                p.x = x;
+                p.y = y;
+                occupied.add(`${x},${y}`);
+                break;
+              }
+            }
+          }
+          cases.push({ name: `Empty row ${4 - row}`, game: g });
+        }
+        for (const perspective of ["black", "white"])
+          for (const p of initial.pieces.filter(
+            (p) => p.color === perspective,
+          )) {
+            cases.push({
+              name: `${perspective} view · selected ${p.id}`,
+              game: { ...initial, current: perspective },
+              perspective,
+              selected: p.id,
+            });
+          }
+        function Check() {
+          const [index, setIndex] = useState(0),
+            [reports, setReports] = useState([]),
+            [ready, setReady] = useState(false);
+          const [demo, setDemo] = useState(null),
+            [selected, setSelected] = useState(null);
+          const ref = useRef(null),
+            baseline = useRef(null);
+          const fixture = cases[index];
+          const game = demo || fixture.game;
+          useEffect(() => {
+            if (ready) return;
+            const timer = setTimeout(() => {
+              const board = ref.current
+                .querySelector(".push-board")
+                .getBoundingClientRect();
+              const bounds = ref.current
+                .querySelector(".push-board-frame")
+                .getBoundingClientRect();
+              const cells = [...ref.current.querySelectorAll(".push-cell")].map(
+                (el) => el.getBoundingClientRect(),
+              );
+              const arrows = [
+                ...ref.current.querySelectorAll(".push-rotate"),
+              ].map((el) => el.getBoundingClientRect());
+              if (!baseline.current)
+                baseline.current = cells.map((r) => [
+                  r.x,
+                  r.y,
+                  r.width,
+                  r.height,
+                ]);
+              const equal = cells.every(
+                (r) =>
+                  Math.abs(r.width - r.height) < 1 &&
+                  Math.abs(r.height - cells[0].height) < 1,
+              );
+              const stable = cells.every((r, i) =>
+                [r.x, r.y, r.width, r.height].every(
+                  (v, j) => Math.abs(v - baseline.current[i][j]) < 1,
+                ),
+              );
+              const touch = arrows.every(
+                (r) =>
+                  r.width >= 43.9 &&
+                  r.height >= 43.9 &&
+                  r.left >= bounds.left - 0.1 &&
+                  r.right <= bounds.right + 0.1,
+              );
+              const fit = bounds.right <= innerWidth && bounds.left >= 0;
+              const report = `${equal && stable && touch && fit ? "PASS" : "FAIL"}: ${fixture.name} · equal squares ${equal} · stable grid ${stable} · touch targets ${touch} ${arrows.map((r) => `${r.width.toFixed(2)}×${r.height.toFixed(2)}px`).join(", ")} · fits ${fit} · board ${board.width.toFixed(1)}px`;
+              setReports((prev) => [...prev, report]);
+              if (index < cases.length - 1) setIndex(index + 1);
+              else setReady(true);
+            }, 50);
+            return () => clearTimeout(timer);
+          }, [index, ready]);
+          return React.createElement(
+            "main",
+            { style: { padding: "16px" } },
+            React.createElement(
+              "h1",
+              { style: { fontSize: "20px", marginBottom: "12px" } },
+              `${width}px · ${ready ? `Checks complete · ${reports.filter((r) => r.startsWith("PASS")).length}/${cases.length} PASS` : "Checking…"}`,
+            ),
+            React.createElement(
+              "div",
+              { ref },
+              React.createElement(PushBoard, {
+                game,
+                selected: ready
+                  ? selected || fixture.selected
+                  : fixture.selected,
+                perspective: fixture.perspective || "white",
+                interactive: true,
+                onSelect: setSelected,
+                onRotate: (type) =>
+                  setDemo(
+                    act(game, { type, pieceId: selected || fixture.selected }),
+                  ),
+                onForward: () =>
+                  setDemo(
+                    act(game, {
+                      type: "forward",
+                      pieceId: selected || fixture.selected,
+                    }),
+                  ),
+              }),
+            ),
+            React.createElement(
+              "pre",
+              {
+                style: {
+                  whiteSpace: "pre-wrap",
+                  fontSize: "11px",
+                  marginTop: "20px",
+                },
+              },
+              reports.join("\n"),
+            ),
+          );
+        }
+        createRoot(
+          document.body.appendChild(document.createElement("div")),
+        ).render(React.createElement(Check));
+      }
+    </script>
+  </body>
+</html>
