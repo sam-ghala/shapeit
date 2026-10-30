@@ -56,7 +56,7 @@ td {
   display: grid;
   gap: 7px;
 }
-.admin-player-list button {
+.admin-player-list > li {
   display: grid;
   grid-template-columns: minmax(130px, 1fr) 1fr auto;
   width: 100%;
@@ -66,10 +66,14 @@ td {
   padding: 9px 12px;
   font-size: 13px;
   font-weight: 500;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
 }
 .admin-player-name {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 .admin-player-name strong {
@@ -80,7 +84,7 @@ td {
   color: var(--muted);
   font-size: 11px;
 }
-.admin-player-list button[aria-pressed="true"],
+.admin-player-list > li.is-selected,
 .admin-all-players[aria-pressed="true"] {
   background: #b9e8d9;
 }
@@ -91,8 +95,8 @@ td {
   margin-top: 10px;
 }
 @media (max-width: 600px) {
-  .admin-player-list button {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .admin-player-list > li {
+    grid-template-columns: minmax(0, 1fr);
     gap: 5px 8px;
   }
   .admin-player-list time {
@@ -102,4 +106,34 @@ td {
 .admin-game-filter {
   max-width: 300px;
   margin: 16px 0;
+}
+
+.admin-player-select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.admin-delete-player {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ad4434;
+}
+.admin-delete-player:hover:not(:disabled) {
+  background: #fff0ed;
+}
+.admin-confirm-delete {
+  background: var(--coral);
+  box-shadow: var(--raised-shadow);
 }

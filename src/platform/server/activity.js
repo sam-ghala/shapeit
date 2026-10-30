@@ -8,7 +8,7 @@ export function recordEvent(sql, input, now) {
     typeof input.id !== "string" ||
     !input.id ||
     input.id.length > 128 ||
-    !["start", "finish", "visit"].includes(input.kind) ||
+    !["start", "finish", "abort", "visit"].includes(input.kind) ||
     !game.modes.includes(input.mode) ||
     !game.sizes.includes(input.size) ||
     (input.kind === "visit" && game.status !== "coming-soon")
@@ -59,11 +59,11 @@ export function activityView(sql, params) {
   const player = params.get("player"),
     game = params.get("game");
   if (game && !gameInfo(game)) throw new Error("Unknown game.");
-  const gameFilter = game
-    ? "WHERE COALESCE(json_extract(data, '$.game'), 'shapeit') = ?"
-    : "";
+  const terminal = "json_extract(data, '$.kind') IN ('finish', 'abort')";
+  const gameFilter = `WHERE ${terminal}${game ? " AND COALESCE(json_extract(data, '$.game'), 'shapeit') = ?" : ""}`;
   const args = game ? [game] : [];
   const where = [
+    terminal,
     game ? "COALESCE(json_extract(data, '$.game'), 'shapeit') = ?" : "",
     player ? "json_extract(data, '$.profileId') = ?" : "",
   ].filter(Boolean);
@@ -79,7 +79,8 @@ export function activityView(sql, params) {
       SELECT profileId, MAX(CASE WHEN position = 1 THEN json_extract(data, '$.name') END) AS name,
         MAX(playedAt) AS lastPlayed,
         COUNT(DISTINCT CASE WHEN json_extract(data, '$.kind') != 'visit' THEN COALESCE(json_extract(data, '$.game'), 'shapeit') || ':' || COALESCE(NULLIF(json_extract(data, '$.sessionId'), ''), json_extract(data, '$.id')) END) AS games,
-        SUM(CASE WHEN json_extract(data, '$.kind') = 'finish' THEN 1 ELSE 0 END) AS finishes
+        SUM(CASE WHEN json_extract(data, '$.kind') = 'finish' THEN 1 ELSE 0 END) AS finishes,
+        SUM(CASE WHEN json_extract(data, '$.kind') = 'abort' THEN 1 ELSE 0 END) AS aborts
       FROM activity GROUP BY profileId ORDER BY lastPlayed DESC, profileId
     `,
         ...args,
@@ -93,4 +94,20 @@ export function activityView(sql, params) {
       ),
     ].map((row) => ({ game: "shapeit", ...JSON.parse(row.data) })),
   };
+}
+
+export function deletePlayerEvents(sql, profileId) {
+  if (typeof profileId !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(profileId))
+    throw new Error("Choose a valid player.");
+  const deleted = [
+    ...sql.exec(
+      "SELECT COUNT(*) AS count FROM events WHERE json_extract(data, '$.profileId') = ?",
+      profileId,
+    ),
+  ][0].count;
+  sql.exec(
+    "DELETE FROM events WHERE json_extract(data, '$.profileId') = ?",
+    profileId,
+  );
+  return { ok: true, deleted };
 }

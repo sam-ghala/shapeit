@@ -963,7 +963,7 @@ test("admin lists distinct player IDs, searches names and requests activity for 
       name: "Robin",
       mode: "training",
       size: "classic",
-      kind: "start",
+      kind: "abort",
       occurredAt: "2026-10-29T11:00:00Z",
     },
   ];
@@ -1004,7 +1004,9 @@ test("admin lists distinct player IDs, searches names and requests activity for 
     assert.equal(playerList().findAllByType("li").length, 1);
     assert.ok(text(playerList()).includes("Robin"));
     await act(async () => {
-      playerList().findByType("button").props.onClick();
+      playerList()
+        .findByProps({ className: "admin-player-select" })
+        .props.onClick();
       await Promise.resolve();
     });
     assert.equal(calls.at(-1), "/api/admin/events?player=player-two");
@@ -1027,7 +1029,11 @@ test("admin lists distinct player IDs, searches names and requests activity for 
         .props.onChange({ target: { value: "pushit" } }),
     );
     assert.equal(calls.at(-1), "/api/admin/events?game=pushit");
-    await act(async () => playerList().findByType("button").props.onClick());
+    await act(async () =>
+      playerList()
+        .findByProps({ className: "admin-player-select" })
+        .props.onClick(),
+    );
     assert.equal(
       calls.at(-1),
       "/api/admin/events?player=player-two&game=pushit",
@@ -1269,5 +1275,96 @@ test("group race results rank every player and keep incorrect attempts at zero",
     assert.ok(text(rendered.root).includes("You"));
   } finally {
     act(() => rendered.unmount());
+  }
+});
+
+test("admin hides cached starts and confirms player-wide deletion, including error and retry", async () => {
+  const previousFetch = globalThis.fetch,
+    calls = [];
+  let removed = false,
+    fail = true;
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (options.method === "POST") {
+      if (fail)
+        return Response.json({ error: "Delete failed" }, { status: 500 });
+      removed = true;
+      return Response.json({ ok: true, deleted: 4 });
+    }
+    return Response.json({
+      players: removed
+        ? []
+        : [
+            {
+              profileId: "delete-ui-player",
+              name: "Sam",
+              games: 1,
+              finishes: 1,
+              aborts: 0,
+              lastPlayed: "2026-10-30T10:00:00Z",
+            },
+          ],
+      events: removed
+        ? []
+        : [
+            {
+              id: "start",
+              kind: "start",
+              profileId: "delete-ui-player",
+              name: "Sam",
+            },
+            {
+              id: "finish",
+              kind: "finish",
+              profileId: "delete-ui-player",
+              name: "Sam",
+              mode: "daily",
+              size: "compact",
+              occurredAt: "2026-10-30T10:00:00Z",
+            },
+          ],
+    });
+  };
+  const view = mount(AdminPage, { onHome() {} });
+  try {
+    act(() =>
+      view.root
+        .findByProps({ type: "password" })
+        .props.onChange({ target: { value: "Admin" } }),
+    );
+    await act(async () =>
+      view.root.findByType("form").props.onSubmit({ preventDefault() {} }),
+    );
+    assert.equal(view.root.findByType("tbody").findAllByType("tr").length, 1);
+    const trash = () =>
+      view.root.findByProps({ "aria-label": "Delete all events for Sam" });
+    act(() => trash().props.onClick());
+    assert.equal(calls.filter((c) => c.options.method === "POST").length, 0);
+    act(() => button(view, "Cancel").props.onClick());
+    assert.equal(view.root.findAllByType("dialog").length, 0);
+    act(() => trash().props.onClick());
+    await act(async () => button(view, "Delete all events").props.onClick());
+    assert.ok(view.root.findByType("dialog"));
+    assert.ok(text(view.root).includes("Delete failed"));
+    assert.equal(removed, false);
+    fail = false;
+    await act(async () => button(view, "Delete all events").props.onClick());
+    const deletion = calls.find((c) => c.options.method === "POST");
+    assert.equal(deletion.url, "/api/admin/events/delete-player");
+    assert.equal(deletion.options.headers.Authorization, "Bearer Admin");
+    assert.deepEqual(JSON.parse(deletion.options.body), {
+      profileId: "delete-ui-player",
+    });
+    assert.equal(view.root.findAllByType("dialog").length, 0);
+    assert.equal(
+      view.root
+        .findByProps({ className: "admin-player-list" })
+        .findAllByType("li").length,
+      0,
+    );
+    assert.equal(view.root.findByType("tbody").findAllByType("tr").length, 0);
+  } finally {
+    act(() => view.unmount());
+    globalThis.fetch = previousFetch;
   }
 });

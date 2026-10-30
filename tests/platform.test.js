@@ -4,7 +4,11 @@ import { DatabaseSync } from "node:sqlite";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { resolveGame, gameHref, gamePath } from "../src/platform/routing.js";
-import { recordEvent, activityView } from "../src/platform/server/activity.js";
+import {
+  recordEvent,
+  activityView,
+  deletePlayerEvents,
+} from "../src/platform/server/activity.js";
 import { getProfile, saveProfile, PROFILE_KEY } from "../src/shared/profile.js";
 
 test("subdomains select independent games while existing paths and preview links keep working", () => {
@@ -160,10 +164,24 @@ test("admin filters events and player totals by game and keeps legacy ShapeIt ac
     },
     now,
   );
+  recordEvent(
+    sql,
+    {
+      ...common,
+      sessionId: "aborted-round",
+      id: "push-abort",
+      game: "pushit",
+      kind: "abort",
+      mode: "local",
+      size: "4x4",
+    },
+    now,
+  );
   const all = activityView(sql, new URLSearchParams());
-  assert.equal(all.events.length, 4);
+  assert.equal(all.events.length, 3);
+  assert.ok(all.events.every((e) => ["finish", "abort"].includes(e.kind)));
   assert.equal(all.players.length, 1);
-  assert.equal(all.players[0].games, 2); // Same session ID in two games is still two games.
+  assert.equal(all.players[0].games, 3); // Same session ID in two games is still two games.
   assert.equal(all.players[0].finishes, 2);
   assert.equal(all.events.find((e) => e.id === "legacy").game, "shapeit");
   const push = activityView(
@@ -171,14 +189,15 @@ test("admin filters events and player totals by game and keeps legacy ShapeIt ac
     new URLSearchParams("game=pushit&player=shared-player"),
   );
   assert.equal(push.events.length, 2);
-  assert.equal(push.players[0].games, 1);
+  assert.equal(push.players[0].games, 2);
+  assert.equal(push.players[0].aborts, 1);
   assert.equal(push.events.find((e) => e.kind === "finish").turns, 5);
   assert.ok(!JSON.stringify(push).includes("secret"));
   const shape = activityView(sql, new URLSearchParams("game=shapeit"));
   assert.equal(shape.events.length, 1);
   assert.equal(shape.events[0].id, "legacy");
   assert.equal(
-    activityView(sql, new URLSearchParams("game=chessit")).players[0].games,
+    activityView(sql, new URLSearchParams("game=chessit")).players.length,
     0,
   );
   assert.throws(
@@ -233,4 +252,59 @@ test("games and shared building blocks never import another game's implementatio
       }
     }
   }
+});
+
+test("deleting a player removes every stored event across games and names but preserves another player with the same name", () => {
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec: (query, ...args) => db.prepare(query).all(...args) };
+  sql.exec(
+    "CREATE TABLE events (id TEXT PRIMARY KEY, at INTEGER NOT NULL, data TEXT NOT NULL)",
+  );
+  const now = Date.now();
+  for (const [profileId, name] of [
+    ["delete-player", "Sam"],
+    ["delete-player", "Old name"],
+    ["keep-player", "Sam"],
+  ]) {
+    for (const [game, mode, size, kind] of [
+      ["shapeit", "daily", "compact", "start"],
+      ["shapeit", "daily", "compact", "finish"],
+      ["pushit", "local", "4x4", "abort"],
+      ["chessit", "preview", "8x8", "visit"],
+    ])
+      recordEvent(
+        sql,
+        {
+          id: crypto.randomUUID(),
+          profileId,
+          name,
+          sessionId: crypto.randomUUID(),
+          game,
+          mode,
+          size,
+          kind,
+        },
+        now,
+      );
+  }
+  for (const invalid of [null, "", "x", "delete-player' OR 1=1 --"])
+    assert.throws(() => deletePlayerEvents(sql, invalid), /valid player/);
+  assert.equal(
+    [...sql.exec("SELECT COUNT(*) AS count FROM events")][0].count,
+    12,
+  );
+  assert.deepEqual(deletePlayerEvents(sql, "delete-player"), {
+    ok: true,
+    deleted: 8,
+  });
+  const remaining = [...sql.exec("SELECT data FROM events")].map((row) =>
+    JSON.parse(row.data),
+  );
+  assert.equal(remaining.length, 4);
+  assert.ok(remaining.every((event) => event.profileId === "keep-player"));
+  assert.deepEqual(deletePlayerEvents(sql, "delete-player"), {
+    ok: true,
+    deleted: 0,
+  });
+  db.close();
 });

@@ -114,3 +114,31 @@ test("new day gets a fresh puzzle and preserves yesterday; malformed saves reset
   });
   assert.deepEqual(loadSession(config).history, []);
 });
+
+test("replacing an unfinished local board records one abort; returning to the menu preserves a resumable game", () => {
+  entries.clear();
+  let renderer = mount();
+  act(() => current.cell(0, 0, "red"));
+  const id = current.game.id;
+  act(() => renderer.unmount());
+  assert.equal(
+    JSON.parse(entries.get("shapeit:events")).filter((e) => e.kind === "abort")
+      .length,
+    0,
+  );
+  renderer = mount();
+  act(() => current.newTraining());
+  const aborts = JSON.parse(entries.get("shapeit:events")).filter(
+    (e) => e.kind === "abort",
+  );
+  assert.equal(aborts.length, 1);
+  assert.equal(aborts[0].sessionId, id);
+  act(() => current.submit());
+  act(() => current.newTraining());
+  assert.equal(
+    JSON.parse(entries.get("shapeit:events")).filter((e) => e.kind === "abort")
+      .length,
+    1,
+  );
+  act(() => renderer.unmount());
+});

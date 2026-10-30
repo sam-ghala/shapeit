@@ -511,6 +511,12 @@ test("auto-rotation defaults on, can be unchecked, and a local game can be left"
   assert.ok(aria(view, "Leave game?"));
   await click(view, "Leave");
   assert.equal(saved(), null);
+  assert.equal(
+    JSON.parse(local.get("shapeit:events")).filter(
+      (e) => e.game === "pushit" && e.kind === "abort",
+    ).length,
+    1,
+  );
   assert.equal(JSON.parse(local.get("pushit:local:v1")), null);
   assert.ok(button(view, "Same device"));
 });

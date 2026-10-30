@@ -1,7 +1,13 @@
 import { json } from "./http.js";
-import { recordEvent, activityView } from "./activity.js";
-import { handleShapeIt } from "../../games/shapeit/server/api.js";
-import { handlePushIt } from "../../games/pushit/server/api.js";
+import { recordEvent, activityView, deletePlayerEvents } from "./activity.js";
+import {
+  handleShapeIt,
+  expireShapeItRooms,
+} from "../../games/shapeit/server/api.js";
+import {
+  handlePushIt,
+  expirePushItRooms,
+} from "../../games/pushit/server/api.js";
 export class GameService {
   constructor(ctx) {
     this.sql = ctx.storage.sql;
@@ -77,8 +83,9 @@ export class GameService {
   }
   handle(request, url, body) {
     const now = Date.now();
+    expireShapeItRooms(this, now);
+    expirePushItRooms(this, now);
     this.sql.exec("DELETE FROM events WHERE at < ?", now - 30 * 86400000);
-    this.sql.exec("DELETE FROM rooms WHERE expires < ?", now);
     if (url.pathname === "/api/events" && request.method === "POST") {
       const game = body.game || "shapeit";
       if (
@@ -94,6 +101,11 @@ export class GameService {
       this.event(body, now);
       return json({ ok: true });
     }
+    if (
+      url.pathname === "/api/admin/events/delete-player" &&
+      request.method === "POST"
+    )
+      return json(deletePlayerEvents(this.sql, body.profileId));
     if (url.pathname === "/api/admin/events" && request.method === "GET")
       return json(activityView(this.sql, url.searchParams));
     if (url.pathname.startsWith("/api/pushit/"))

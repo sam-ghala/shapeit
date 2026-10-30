@@ -100,7 +100,7 @@ const event = {
   profileId: p1.id,
   name: p1.name,
   sessionId: "http-test",
-  kind: "start",
+  kind: "abort",
   mode: "training",
   size: "compact",
   at: new Date(Date.now() - 3600000).toISOString(),
@@ -119,6 +119,7 @@ const hostSummary = activity.players.find((p) => p.profileId === p1.id);
 assert.equal(hostSummary.name, p1.name);
 assert.equal(hostSummary.games, 2);
 assert.equal(hostSummary.finishes, 1);
+assert.equal(hostSummary.aborts, 1);
 const filteredActivity = await request(`/api/admin/events?player=${p1.id}`, {
   token: adminKey,
 });
@@ -131,7 +132,7 @@ const emptyActivity = await request("/api/admin/events?player=unknown-player", {
 assert.deepEqual(emptyActivity.events, []);
 assert.equal(
   activity.events.filter((e) => e.sessionId === finished.id).length,
-  4,
+  2,
 );
 await request("/api/events", {
   body: event,

@@ -169,13 +169,30 @@ export function useGameSession(config, profile) {
     submit,
     clear: () =>
       edit((g) => ({ ...g, guess: emptyBoard(cols, rows), edges: {} })),
-    newTraining: (extras = game.extras) =>
+    newTraining: (extras = game.extras) => {
+      if (game.status === "playing" && game.startedAt)
+        queueEvent(
+          {
+            id: `${game.id}:abort`,
+            sessionId: game.id,
+            kind: "abort",
+            mode: game.mode,
+            size: game.size,
+            queries: game.history.length,
+            seconds: Math.max(
+              0,
+              Math.floor((Date.now() - game.startedAt) / 1000),
+            ),
+          },
+          profile,
+        );
       setGame(
         createSession({
           ...config,
           mode: "training",
           extras,
         }),
-      ),
+      );
+    },
   };
 }

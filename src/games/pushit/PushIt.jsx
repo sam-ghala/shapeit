@@ -507,6 +507,27 @@ export function PushIt() {
     if (action === "join" || action === "create")
       await enter(action === "join", next);
   };
+  const recordLocalAbort = () => {
+    if (local?.phase !== "playing") return;
+    queueEvent(
+      {
+        id: `pushit:${local.gameId}:local:abort`,
+        game: "pushit",
+        sessionId: local.gameId,
+        kind: "abort",
+        mode: "local",
+        size: "4x4",
+        round: local.round,
+        bestOf: local.bestOf,
+        turns: local.game.turn,
+        seconds: Math.max(
+          0,
+          Math.floor((Date.now() - (local.startedAt || Date.now())) / 1000),
+        ),
+      },
+      profile,
+    );
+  };
   const changeLocal = (fn) => {
     const next = structuredClone(local);
     fn(next);
@@ -555,6 +576,7 @@ export function PushIt() {
     }
   };
   const beginLocal = () => {
+    recordLocalAbort();
     setLocal(newMatch(bestOf));
     setSetup(false);
     setScreen("local");
@@ -659,7 +681,10 @@ export function PushIt() {
               className="primary"
               onClick={() => {
                 if (online) service.forget(true);
-                else setLocal(null);
+                else {
+                  recordLocalAbort();
+                  setLocal(null);
+                }
                 setLeave(false);
                 home();
               }}
@@ -684,6 +709,7 @@ export function PushIt() {
                 if (online) {
                   if (await send({ type: "reset" })) setReset(false);
                 } else {
+                  recordLocalAbort();
                   changeLocal(resetRound);
                   setReset(false);
                 }

@@ -7,7 +7,6 @@ import {
   upgradePushRoom,
 } from "../rooms.js";
 export function handlePushIt(service, request, url, body, now) {
-  service.sql.exec("DELETE FROM pushit_rooms WHERE expires < ?", now);
   if (url.pathname === "/api/pushit/rooms" && request.method === "POST") {
     let code;
     for (let i = 0; i < 100; i++) {
@@ -60,6 +59,7 @@ export function handlePushIt(service, request, url, body, now) {
     );
   const room = JSON.parse(row.data);
   upgradePushRoom(room);
+  const previous = structuredClone(room);
   const previousGameId = room.gameId,
     previousPhase = room.phase;
   let token = bearer(request),
@@ -75,6 +75,11 @@ export function handlePushIt(service, request, url, body, now) {
     applyPushAction(room, index, body);
   else if (!joined && request.method !== "GET")
     return json({ error: "Method not allowed." }, 405);
+  if (
+    previousPhase === "playing" &&
+    (room.phase === "closed" || room.gameId !== previousGameId)
+  )
+    recordPushAbort(service, previous, now);
   if (
     room.phase === "playing" &&
     (previousPhase !== "playing" || previousGameId !== room.gameId)
@@ -138,4 +143,41 @@ export function handlePushIt(service, request, url, body, now) {
     room: pushRoomView(room, index),
     ...(joined ? { token } : {}),
   });
+}
+
+function recordPushAbort(service, room, now) {
+  if (room.phase !== "playing") return;
+  room.players.forEach((p, i) =>
+    service.event(
+      {
+        id: `pushit:${room.gameId}:${i}:abort`,
+        game: "pushit",
+        sessionId: room.gameId,
+        profileId: p.id,
+        name: p.name,
+        kind: "abort",
+        mode: "online",
+        size: "4x4",
+        turns: room.game.turn,
+        seconds: Math.max(
+          0,
+          Math.floor((now - (room.startedAt || now)) / 1000),
+        ),
+        round: room.round,
+        bestOf: room.bestOf,
+      },
+      now,
+    ),
+  );
+}
+export function expirePushItRooms(service, now) {
+  for (const row of service.sql.exec(
+    "SELECT data, expires FROM pushit_rooms WHERE expires < ?",
+    now,
+  )) {
+    const room = JSON.parse(row.data);
+    upgradePushRoom(room);
+    recordPushAbort(service, room, row.expires);
+  }
+  service.sql.exec("DELETE FROM pushit_rooms WHERE expires < ?", now);
 }

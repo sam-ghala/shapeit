@@ -28,3 +28,36 @@ test("temporary admin key works only when no server secret is configured", async
     200,
   );
 });
+
+test("player event deletion requires the configured admin key before any storage access", async () => {
+  let calls = 0;
+  const env = {
+    ADMIN_KEY: "private-delete-key",
+    GAME_SERVICE: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: () => {
+          calls++;
+          return Response.json({ ok: true, deleted: 3 });
+        },
+      }),
+    },
+  };
+  const remove = (token) =>
+    worker.fetch(
+      new Request("https://shapeit.test/api/admin/events/delete-player", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ profileId: "delete-player" }),
+      }),
+      env,
+    );
+  assert.equal((await remove()).status, 401);
+  assert.equal((await remove("Admin")).status, 401);
+  assert.equal(calls, 0);
+  assert.equal((await remove("private-delete-key")).status, 200);
+  assert.equal(calls, 1);
+});

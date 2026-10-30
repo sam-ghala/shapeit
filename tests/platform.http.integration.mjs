@@ -50,16 +50,20 @@ for (const game of ["shapeit", "pushit", "chessit"]) {
 const all = await request(`/api/admin/events?player=${id}`);
 assert.deepEqual(
   new Set(all.events.map((e) => e.game)),
-  new Set(["shapeit", "pushit", "chessit"]),
+  new Set(["shapeit", "pushit"]),
 );
-assert.equal(all.events.length, 5);
+assert.equal(all.events.length, 2);
+assert.ok(all.events.every((e) => e.kind === "finish"));
 assert.equal(all.players.find((p) => p.profileId === id).games, 2);
 for (const game of ["shapeit", "pushit", "chessit"]) {
   const data = await request(`/api/admin/events?game=${game}&player=${id}`);
   assert.ok(data.events.every((e) => e.game === game && e.profileId === id));
   const player = data.players.find((p) => p.profileId === id);
-  assert.equal(player.games, game === "chessit" ? 0 : 1);
-  assert.equal(player.finishes, game === "chessit" ? 0 : 1);
+  if (game === "chessit") assert.equal(player, undefined);
+  else {
+    assert.equal(player.games, 1);
+    assert.equal(player.finishes, 1);
+  }
 }
 const push = await request("/api/admin/events?game=pushit");
 assert.ok(
@@ -87,6 +91,17 @@ await request(
   400,
 );
 await request("/api/admin/events?game=unknown", null, 400);
+const beforeDelete = await request(`/api/admin/events?player=${id}`);
+assert.equal(beforeDelete.events.length, 2);
+const deleted = await request("/api/admin/events/delete-player", {
+  profileId: id,
+});
+assert.equal(deleted.deleted, 5); // Hidden starts and the preview visit are removed as well.
+const afterDelete = await request(`/api/admin/events?player=${id}`);
+assert.deepEqual(afterDelete.events, []);
+assert.ok(!afterDelete.players.some((p) => p.profileId === id));
+await request("/api/admin/events/delete-player", { profileId: "" }, 400);
+
 console.log(
   `PASS: ${calls} shared-platform API requests; three games, legacy events, combined game/player filters, player totals, authoritative PushIt series and forged-online rejection.`,
 );
