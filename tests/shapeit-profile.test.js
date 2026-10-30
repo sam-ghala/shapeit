@@ -170,9 +170,14 @@ test("unnamed players must choose a name before entering multiplayer", () => {
 });
 
 test("direct room links preserve the invite while requiring the shared name first", async () => {
-  const view = setup("", "/?room=2468");
+  const view = setup("", "/?room=2468", { screen: "menu", dialog: "howto" });
   try {
     assert.equal(button(view, "Join room"), undefined);
+    assert.equal(view.root.findAllByType("dialog").length, 1);
+    assert.equal(
+      view.root.findByType("dialog").props["aria-label"],
+      "Your name",
+    );
     assert.equal(requests.length, 0);
     submitName(view, "Guest");
     assertNoNameEditor(view);

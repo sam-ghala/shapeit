@@ -248,10 +248,10 @@ export default function ShapeIt() {
           </form>
         </Dialog>
       )}
-      {scoresOpen && (
+      {scoresOpen && !needsMultiplayerName && (
         <Scoreboard initialSize={size} onClose={() => setScoresOpen(false)} />
       )}
-      {howTo && (
+      {howTo && !needsMultiplayerName && (
         <HowToPlayModal
           pieces={buildPieces(`guide:${today}`, size, false)}
           cols={cols}
