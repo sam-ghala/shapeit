@@ -165,78 +165,205 @@ test("saved positions reject corrupt directions, overlapping pieces and invalid 
   );
 });
 
-function room() {
-  const value = createPushRoom("0123", profile(1), "white", "black", 1000);
-  joinPushRoom(value, profile(2));
-  return value;
-}
 const send = (room, index, body) =>
   applyPushAction(room, index, { ...body, revision: room.revision });
+const actor = (r) => r.players.findIndex((p) => p.color === r.game.current);
+function room(bestOf = 0) {
+  const r = createPushRoom("0123", profile(1), 1000);
+  joinPushRoom(r, profile(2));
+  if (bestOf) send(r, 0, { type: "format", bestOf });
+  send(r, 0, { type: "start" });
+  return r;
+}
+function win(r, color) {
+  const other = color === "black" ? "white" : "black";
+  r.game = {
+    ...createGame(color),
+    pieces: [piece(`${color[0]}1`, 2, 1, 1), piece(`${other[0]}1`, 3, 1, 0)],
+  };
+  send(r, actor(r), action("forward", `${color[0]}1`));
+}
+const next = (r) => {
+  send(r, 0, { type: "rematch" });
+  send(r, 1, { type: "rematch" });
+};
 
-test("private rooms assign opposite colors, hide all tokens and reject extra or duplicate players", () => {
-  const r = createPushRoom("0123", profile(1));
-  assert.equal(
-    createPushRoom("0123", profile(1), "black", "black", 1000).expiresAt,
-    7201000,
+test("rooms require a name, begin in a lobby, and do not start on joining", () => {
+  assert.throws(
+    () => createPushRoom("1234", { id: "valid-player", name: "" }),
+    /name/,
   );
+  const r = createPushRoom("0123", profile(1), 1000);
+  assert.equal(r.expiresAt, 7201000);
+  assert.equal(r.phase, "lobby");
+  assert.throws(() => send(r, 0, { type: "start" }), /both players/);
   assert.throws(() => joinPushRoom(r, profile(1)), /different browser/);
-  const token = joinPushRoom(r, profile(2));
-  assert.equal(token, r.players[1].token);
+  joinPushRoom(r, profile(2));
+  assert.equal(r.phase, "lobby");
+  assert.throws(() => joinPushRoom(r, profile(3)), /full/);
+  assert.throws(() => send(r, 1, { type: "start" }), /host/);
+});
+
+test("both lobby players can switch colors, but only the host sets the odd series length", () => {
+  const r = createPushRoom("0123", profile(1));
+  send(r, 0, { type: "color", color: "white" });
+  joinPushRoom(r, profile(2));
+  assert.deepEqual(
+    r.players.map((p) => p.color),
+    ["white", "black"],
+  );
+  send(r, 1, { type: "color", color: "white" });
   assert.deepEqual(
     r.players.map((p) => p.color),
     ["black", "white"],
   );
-  assert.throws(() => joinPushRoom(r, profile(3)), /full/);
-  const view = pushRoomView(r, 1);
-  assert.equal(view.you, 1);
-  for (const p of r.players) assert.ok(!JSON.stringify(view).includes(p.token));
+  assert.throws(() => send(r, 1, { type: "format", bestOf: 3 }), /host/);
+  for (const bestOf of [0, 3, 5, 7, 9, 15, 99]) {
+    send(r, 0, { type: "format", bestOf });
+    assert.equal(r.bestOf, bestOf);
+  }
+  for (const bestOf of [1, 2, 4, 100, 101, -3, "3"])
+    assert.throws(() => send(r, 0, { type: "format", bestOf }));
+  send(r, 0, { type: "start", starter: "forged" });
+  assert.ok(["black", "white"].includes(r.starter));
+  assert.equal(r.game.current, r.starter);
+  assert.throws(() => send(r, 0, { type: "color", color: "white" }), /locked/);
+  assert.throws(() => send(r, 0, { type: "format", bestOf: 0 }), /lobby/);
 });
 
-test("the server enforces turns, revisions and action legality without changing rejected positions", () => {
+test("room views never expose credentials or undo snapshots and enforce turns and revisions", () => {
   const r = room();
-  assert.throws(() => send(r, 0, action("forward")), /opponent/);
-  assert.throws(() => send(r, -1, action("left")), /access denied/);
+  const index = actor(r),
+    id = `${r.game.current[0]}1`;
+  assert.throws(() => send(r, 1 - index, action("left", id)), /opponent/);
+  assert.throws(() => send(r, -1, action("left", id)), /access denied/);
   const revision = r.revision;
-  send(r, 1, action("left"));
+  send(r, index, action("left", id));
   const snapshot = JSON.stringify(r);
   assert.throws(
-    () => applyPushAction(r, 1, { ...action("left"), revision }),
+    () => applyPushAction(r, index, { ...action("left", id), revision }),
     /board changed/,
   );
   assert.equal(JSON.stringify(r), snapshot);
-  send(r, 1, { type: "end" });
-  assert.equal(r.game.current, "white");
+  for (let i = 0; i < 2; i++) {
+    const view = pushRoomView(r, i);
+    assert.equal(view.you, i);
+    assert.equal(view.canUndo, i === index);
+    assert.equal(view.undoStack, undefined);
+    for (const p of r.players)
+      assert.ok(!JSON.stringify(view).includes(p.token));
+  }
 });
 
-test("wins count once; rematches and consensual resets require both players", () => {
-  const r = room();
-  r.game = position([piece("b1", 2, 1, 1), piece("w1", 3, 1, 1)]);
-  send(r, 1, action("forward"));
-  assert.equal(r.phase, "finished");
-  assert.equal(r.wins.black, 1);
-  assert.throws(() => send(r, 1, action("forward")), /Wait for/);
-  send(r, 1, { type: "rematch" });
-  assert.equal(r.phase, "finished");
-  send(r, 0, { type: "rematch" });
+test("undo freezes play and requires the opponent's approval, including after the turn ends", () => {
+  const r = room(),
+    index = actor(r),
+    id = `${r.game.current[0]}1`;
+  const before = structuredClone(r.game);
+  send(r, index, action("forward", id));
+  const moved = structuredClone(r.game);
+  send(r, index, { type: "undo" });
+  assert.deepEqual(r.game, moved);
+  assert.throws(
+    () => send(r, index, { type: "undo-response", accept: true }),
+    /opponent must approve/,
+  );
+  assert.throws(() => send(r, index, action("left", id)), /Resolve/);
+  assert.throws(() => send(r, 1 - index, { type: "reset" }), /Resolve/);
+  send(r, 1 - index, { type: "undo-response", accept: false });
+  assert.deepEqual(r.game, moved);
+  send(r, index, { type: "undo" });
+  send(r, 1 - index, { type: "undo-response", accept: true });
+  assert.deepEqual(r.game, before);
+  assert.equal(r.undoRequest, null);
+  send(r, index, action("left", id));
+  send(r, index, { type: "end" });
+  assert.equal(actor(r), 1 - index);
+  send(r, index, { type: "undo" });
+  send(r, 1 - index, { type: "undo-response", accept: true });
+  assert.equal(actor(r), index);
+  assert.equal(r.game.used, 1);
+});
+
+test("an approved undo of a winning move also restores scores and a completed series", () => {
+  const r = room(3);
+  win(r, "black");
+  next(r);
+  win(r, "black");
+  assert.equal(r.phase, "complete");
+  assert.equal(r.matchWinner, "black");
+  assert.equal(r.wins.black, 2);
+  const winner = r.players.findIndex((p) => p.color === "black");
+  send(r, winner, { type: "undo" });
+  send(r, 1 - winner, { type: "undo-response", accept: true });
   assert.equal(r.phase, "playing");
-  assert.equal(r.round, 2);
+  assert.equal(r.game.winner, null);
   assert.equal(r.wins.black, 1);
-  send(r, 0, { type: "reset" });
-  assert.equal(r.round, 2);
-  send(r, 1, { type: "reset" });
-  assert.equal(r.round, 3);
-  assert.equal(r.wins.black, 1);
-  assert.deepEqual(r.game, createGame("black"));
+  assert.equal(r.matchWinner, null);
 });
 
-test("leaving a room closes play without inventing a winner", () => {
+test("free play keeps scores, alternates starters and waits for both rematch votes", () => {
+  const r = room(),
+    starter = r.starter;
+  win(r, "black");
+  assert.deepEqual(r.wins, { black: 1, white: 0 });
+  send(r, 0, { type: "rematch" });
+  assert.equal(r.phase, "finished");
+  send(r, 1, { type: "rematch" });
+  assert.equal(r.starter, starter === "black" ? "white" : "black");
+  win(r, "black");
+  next(r);
+  win(r, "white");
+  assert.deepEqual(r.wins, { black: 2, white: 1 });
+  assert.equal(r.phase, "finished");
+  next(r);
+  assert.equal(r.round, 4);
+  assert.equal(r.matchWinner, null);
+});
+
+test("best-of 3, 5, 7 and 15 end at the required wins and a new series needs both players", () => {
+  for (const bestOf of [3, 5, 7, 15]) {
+    const r = room(bestOf),
+      target = (bestOf + 1) / 2;
+    for (let n = 1; n <= target; n++) {
+      win(r, "white");
+      assert.equal(r.wins.white, n);
+      assert.equal(r.phase, n === target ? "complete" : "finished");
+      if (n < target) next(r);
+    }
+    assert.equal(r.matchWinner, "white");
+    assert.throws(() => send(r, 0, { type: "rematch" }), /not available/);
+    send(r, 0, { type: "new-series" });
+    assert.equal(r.phase, "complete");
+    send(r, 1, { type: "new-series" });
+    assert.equal(r.phase, "playing");
+    assert.equal(r.round, 1);
+    assert.deepEqual(r.wins, { black: 0, white: 0 });
+    assert.equal(r.bestOf, bestOf);
+  }
+});
+
+test("reset needs both players and preserves score, round and starter", () => {
+  const r = room();
+  win(r, "black");
+  next(r);
+  const { starter, round } = r;
+  send(r, 0, { type: "reset" });
+  assert.equal(r.reset.length, 1);
+  send(r, 1, { type: "reset" });
+  assert.equal(r.starter, starter);
+  assert.equal(r.round, round);
+  assert.deepEqual(r.wins, { black: 1, white: 0 });
+  assert.deepEqual(r.game, createGame(starter));
+});
+
+test("leaving closes the room without inventing a winner", () => {
   const r = room();
   send(r, 1, { type: "leave" });
   assert.equal(r.phase, "closed");
   assert.equal(r.left, "Player 2");
   assert.deepEqual(r.wins, { black: 0, white: 0 });
-  assert.equal(r.game.winner, null);
-  assert.throws(() => send(r, 0, action("forward")), /closed/);
+  assert.throws(() => send(r, 0, { type: "start" }), /closed/);
 });
 
 test("many legal action sequences preserve board and turn invariants", () => {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PushIt browser regression checks</title>
+    <title>PushIt browser checks</title>
     <style>
       body {
         margin: 0;
@@ -11,194 +11,301 @@
         font: 14px system-ui;
         color: #263646;
       }
-      nav {
-        padding: 12px;
+      #qa-nav {
+        padding: 10px;
         display: flex;
+        gap: 8px;
         flex-wrap: wrap;
-        gap: 12px;
+        align-items: center;
       }
-      iframe {
+      #qa-nav a,
+      #qa-nav button {
+        font: 12px system-ui;
+        min-height: 32px;
+        padding: 5px 8px;
+      }
+      #qa-frame {
         display: block;
         margin: 0 auto;
         border: 1px solid #bbb;
         max-width: 100%;
       }
-      *,
-      *::before,
-      *::after {
-        transition: none !important;
-        animation: none !important;
+      #qa-report {
+        font: 11px system-ui;
+        white-space: pre-wrap;
+        padding: 12px;
+      }
+      #qa-summary {
+        padding: 0 12px 10px;
+        font-weight: 800;
       }
     </style>
   </head>
   <body>
     <script type="module">
-      import React, { useEffect, useRef, useState } from "react";
-      import { createRoot } from "react-dom/client";
-      import { PushBoard } from "/src/pushit/PushBoard.jsx";
-      import { createGame, act } from "/src/pushit/engine.js";
       import "/src/index.css";
       import "/src/pushit/pushit.css";
-
-      // Open this file through Vite. All layout checks run in Safari's own CSS engine.
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import { PushIt, Rules } from "/src/pushit/PushIt.jsx";
+      import { createGame } from "/src/pushit/engine.js";
+      import { newMatch } from "/src/pushit/match.js";
+      import {
+        createPushRoom,
+        joinPushRoom,
+        applyPushAction,
+        pushRoomView,
+      } from "/src/pushit/rooms.js";
       const params = new URLSearchParams(location.search);
-      const width = Number(params.get("width")) || 390;
+      const sizes = [
+        [320, 568],
+        [390, 844],
+        [430, 932],
+        [1000, 700],
+        [844, 390],
+      ];
+      const scenes = [
+        "menu",
+        "connect",
+        "lobby",
+        "game",
+        "online",
+        "undo",
+        "win",
+        "online-win",
+        "guide",
+        "name",
+      ];
+      const width = Number(params.get("width")) || 390,
+        height = Number(params.get("height")) || 844,
+        scene = params.get("scene") || "game";
       if (!params.has("frame")) {
         const nav = document.createElement("nav");
-        for (const size of [320, 390, 430, 1000]) {
+        nav.id = "qa-nav";
+        for (const [w, h] of sizes) {
           const a = document.createElement("a");
-          a.href = `?width=${size}`;
-          a.textContent = `${size}px viewport`;
+          a.textContent = `${w}×${h}`;
+          a.href = `?width=${w}&height=${h}&scene=${scene}`;
           nav.append(a);
         }
-        const app = document.createElement("a");
-        app.href = "/pushit";
-        app.textContent = "Open game";
-        nav.append(app);
+        for (const s of scenes) {
+          const a = document.createElement("a");
+          a.textContent = s;
+          a.href = `?width=${width}&height=${height}&scene=${s}`;
+          nav.append(a);
+        }
+        const run = document.createElement("button");
+        run.textContent = "Run all 50 layouts";
+        nav.append(run);
+        const summary = document.createElement("div");
+        summary.id = "qa-summary";
         const frame = document.createElement("iframe");
-        frame.title = "PushIt layout tests";
-        frame.src = `?width=${width}&frame=1`;
-        frame.width = width;
-        frame.height = 1050;
-        document.body.append(nav, frame);
+        frame.id = "qa-frame";
+        frame.title = "PushIt browser test";
+        const report = document.createElement("pre");
+        report.id = "qa-report";
+        document.body.append(nav, summary, frame, report);
+        let queue = [],
+          results = [],
+          running = false;
+        const open = (w, h, s, suite = false) => {
+          frame.width = w;
+          frame.height = h;
+          frame.src = `?frame=1&width=${w}&height=${h}&scene=${s}${suite ? "&suite=1" : ""}${params.get("demo") === "win" ? "&demo=win" : ""}`;
+        };
+        run.onclick = () => {
+          queue = sizes.flatMap(([w, h]) => scenes.map((s) => [w, h, s]));
+          results = [];
+          running = true;
+          run.disabled = true;
+          summary.textContent = "Running…";
+          open(...queue.shift(), true);
+        };
+        window.addEventListener("message", (event) => {
+          if (
+            event.origin !== location.origin ||
+            event.data?.kind !== "pushit-layout"
+          )
+            return;
+          results.push(event.data.report);
+          report.textContent = results.join("\n");
+          const passed = results.filter((r) => r.startsWith("PASS")).length;
+          summary.textContent = `${passed}/${results.length} PASS${running ? " · running" : ""}`;
+          if (running && queue.length) open(...queue.shift(), true);
+          else if (running) {
+            running = false;
+            run.disabled = false;
+            summary.textContent = `Complete: ${passed}/${results.length} PASS`;
+          }
+        });
+        open(width, height, scene);
       } else {
-        const initial = createGame();
-        const cases = [{ name: "Initial setup", game: initial }];
-        for (let row = 0; row < 4; row++) {
-          const g = createGame();
-          const occupied = new Set(
-            g.pieces.filter((p) => p.y !== row).map((p) => `${p.x},${p.y}`),
-          );
-          for (const p of g.pieces.filter((p) => p.y === row)) {
-            for (let i = 0; i < 16; i++) {
-              const x = i % 4,
-                y = Math.floor(i / 4);
-              if (y !== row && !occupied.has(`${x},${y}`)) {
-                p.x = x;
-                p.y = y;
-                occupied.add(`${x},${y}`);
-                break;
-              }
-            }
-          }
-          cases.push({ name: `Empty row ${4 - row}`, game: g });
+        if (params.has("suite")) {
+          const style = document.createElement("style");
+          style.textContent =
+            "*,*::before,*::after{transition:none!important;animation:none!important}";
+          document.head.append(style);
         }
-        for (const perspective of ["black", "white"])
-          for (const p of initial.pieces.filter(
-            (p) => p.color === perspective,
-          )) {
-            cases.push({
-              name: `${perspective} view · selected ${p.id}`,
-              game: { ...initial, current: perspective },
-              perspective,
-              selected: p.id,
+        const keys = [
+          "shapeit:profile",
+          "shapeit:sound",
+          "pushit:match:v2",
+          "pushit:local:v1",
+          "pushit:rotate-board",
+          "pushit:room",
+        ];
+        const previous = new Map(keys.map((k) => [k, localStorage.getItem(k)]));
+        const oldView = sessionStorage.getItem("pushit:view");
+        window.addEventListener("pagehide", () => {
+          for (const [k, v] of previous)
+            v === null
+              ? localStorage.removeItem(k)
+              : localStorage.setItem(k, v);
+          oldView === null
+            ? sessionStorage.removeItem("pushit:view")
+            : sessionStorage.setItem("pushit:view", oldView);
+        });
+        keys.forEach((k) => localStorage.removeItem(k));
+        const profile = {
+          id: "pushit-layout-host",
+          name: scene === "name" ? "" : "Alexandria Longplayer",
+        };
+        localStorage.setItem("shapeit:profile", JSON.stringify(profile));
+        localStorage.setItem("shapeit:sound", "false");
+        localStorage.setItem("pushit:rotate-board", "false");
+        const m = newMatch(3, "black");
+        // Empty middle row reproduces the original grid collapse.
+        m.game.pieces.find((p) => p.id === "b2").y = 0;
+        if (params.get("demo") === "win") {
+          m.game.pieces = [
+            { id: "b1", color: "black", x: 2, y: 1, facing: 1 },
+            { id: "w1", color: "white", x: 3, y: 1, facing: 0 },
+          ];
+          m.wins.black = 1;
+          m.round = 2;
+        }
+        if (scene === "win") {
+          m.wins = { black: 2, white: 1 };
+          m.game.winner = "black";
+          m.phase = "complete";
+          m.matchWinner = "black";
+          m.round = 3;
+        }
+        if (["game", "win"].includes(scene)) {
+          localStorage.setItem("pushit:match:v2", JSON.stringify(m));
+          sessionStorage.setItem("pushit:view", JSON.stringify("local"));
+        } else
+          sessionStorage.setItem(
+            "pushit:view",
+            JSON.stringify(
+              scene === "menu" || scene === "guide" ? "menu" : "online",
+            ),
+          );
+        if (["lobby", "online", "undo", "online-win"].includes(scene)) {
+          const r = createPushRoom("2468", profile);
+          joinPushRoom(r, {
+            id: "pushit-layout-guest",
+            name: "Christopher Otherplayer",
+          });
+          applyPushAction(r, 0, {
+            type: "format",
+            bestOf: 15,
+            revision: r.revision,
+          });
+          if (scene !== "lobby") {
+            applyPushAction(r, 0, { type: "start", revision: r.revision });
+            r.game = createGame("black");
+            r.starter = "black";
+          }
+          if (scene === "undo") {
+            applyPushAction(r, 0, {
+              type: "left",
+              pieceId: "b1",
+              revision: r.revision,
             });
+            applyPushAction(r, 0, { type: "undo", revision: r.revision });
           }
-        function Check() {
-          const [index, setIndex] = useState(0),
-            [reports, setReports] = useState([]),
-            [ready, setReady] = useState(false);
-          const [demo, setDemo] = useState(null),
-            [selected, setSelected] = useState(null);
-          const ref = useRef(null),
-            baseline = useRef(null);
-          const fixture = cases[index];
-          const game = demo || fixture.game;
-          useEffect(() => {
-            if (ready) return;
-            const timer = setTimeout(() => {
-              const board = ref.current
-                .querySelector(".push-board")
-                .getBoundingClientRect();
-              const bounds = ref.current
-                .querySelector(".push-board-frame")
-                .getBoundingClientRect();
-              const cells = [...ref.current.querySelectorAll(".push-cell")].map(
-                (el) => el.getBoundingClientRect(),
-              );
-              const arrows = [
-                ...ref.current.querySelectorAll(".push-rotate"),
-              ].map((el) => el.getBoundingClientRect());
-              if (!baseline.current)
-                baseline.current = cells.map((r) => [
-                  r.x,
-                  r.y,
-                  r.width,
-                  r.height,
-                ]);
-              const equal = cells.every(
-                (r) =>
-                  Math.abs(r.width - r.height) < 1 &&
-                  Math.abs(r.height - cells[0].height) < 1,
-              );
-              const stable = cells.every((r, i) =>
-                [r.x, r.y, r.width, r.height].every(
-                  (v, j) => Math.abs(v - baseline.current[i][j]) < 1,
-                ),
-              );
-              const touch = arrows.every(
-                (r) =>
-                  r.width >= 43.9 &&
-                  r.height >= 43.9 &&
-                  r.left >= bounds.left - 0.1 &&
-                  r.right <= bounds.right + 0.1,
-              );
-              const fit = bounds.right <= innerWidth && bounds.left >= 0;
-              const report = `${equal && stable && touch && fit ? "PASS" : "FAIL"}: ${fixture.name} · equal squares ${equal} · stable grid ${stable} · touch targets ${touch} ${arrows.map((r) => `${r.width.toFixed(2)}×${r.height.toFixed(2)}px`).join(", ")} · fits ${fit} · board ${board.width.toFixed(1)}px`;
-              setReports((prev) => [...prev, report]);
-              if (index < cases.length - 1) setIndex(index + 1);
-              else setReady(true);
-            }, 50);
-            return () => clearTimeout(timer);
-          }, [index, ready]);
-          return React.createElement(
-            "main",
-            { style: { padding: "16px" } },
-            React.createElement(
-              "h1",
-              { style: { fontSize: "20px", marginBottom: "12px" } },
-              `${width}px · ${ready ? `Checks complete · ${reports.filter((r) => r.startsWith("PASS")).length}/${cases.length} PASS` : "Checking…"}`,
-            ),
-            React.createElement(
-              "div",
-              { ref },
-              React.createElement(PushBoard, {
-                game,
-                selected: ready
-                  ? selected || fixture.selected
-                  : fixture.selected,
-                perspective: fixture.perspective || "white",
-                interactive: true,
-                onSelect: setSelected,
-                onRotate: (type) =>
-                  setDemo(
-                    act(game, { type, pieceId: selected || fixture.selected }),
-                  ),
-                onForward: () =>
-                  setDemo(
-                    act(game, {
-                      type: "forward",
-                      pieceId: selected || fixture.selected,
-                    }),
-                  ),
+          if (scene === "online-win") {
+            r.bestOf = 3;
+            r.wins = { black: 2, white: 1 };
+            r.phase = "complete";
+            r.matchWinner = "black";
+            r.game.winner = "black";
+            r.round = 3;
+          }
+          const index = scene === "undo" ? 1 : 0;
+          if (index)
+            localStorage.setItem(
+              "shapeit:profile",
+              JSON.stringify({
+                id: r.players[index].id,
+                name: r.players[index].name,
               }),
-            ),
+            );
+          localStorage.setItem(
+            "pushit:room",
+            JSON.stringify({
+              profileId: r.players[index].id,
+              code: r.code,
+              token: r.players[index].token,
+            }),
+          );
+          window.fetch = async () =>
+            Response.json({ room: pushRoomView(r, index) });
+        }
+        if (scene === "name")
+          history.replaceState(null, "", `${location.href}&room=1234`);
+        const root = createRoot(
+          document.body.appendChild(document.createElement("div")),
+        );
+        if (scene === "guide")
+          root.render(
             React.createElement(
-              "pre",
-              {
-                style: {
-                  whiteSpace: "pre-wrap",
-                  fontSize: "11px",
-                  marginTop: "20px",
-                },
-              },
-              reports.join("\n"),
+              "main",
+              { className: "push-app" },
+              React.createElement(Rules, { onClose() {} }),
             ),
           );
-        }
-        createRoot(
-          document.body.appendChild(document.createElement("div")),
-        ).render(React.createElement(Check));
+        else root.render(React.createElement(PushIt));
+        setTimeout(() => {
+          const main = document.querySelector(".push-app"),
+            dialog = document.querySelector("dialog[open]");
+          const container = dialog || main;
+          const visible = [...container.querySelectorAll("button,input")]
+            .map((el) => ({ el, box: el.getBoundingClientRect() }))
+            .filter(({ box }) => box.width > 0 && box.height > 0);
+          const clipped = visible.filter(
+            ({ box }) =>
+              box.left < -0.2 ||
+              box.right > innerWidth + 0.2 ||
+              box.top < -0.2 ||
+              box.bottom > innerHeight + 0.2,
+          );
+          const scroll =
+            container.scrollHeight > container.clientHeight + 1 ||
+            document.documentElement.scrollHeight > innerHeight + 1;
+          const rects = [...document.querySelectorAll(".push-cell")].map((el) =>
+            el.getBoundingClientRect(),
+          );
+          const square = rects.every(
+            (r) =>
+              Math.abs(r.width - r.height) < 1 &&
+              Math.abs(r.width - rects[0].width) < 1,
+          );
+          const board = document
+            .querySelector(".push-board-frame")
+            ?.getBoundingClientRect();
+          const pass = !scroll && !clipped.length && square;
+          const message = `${pass ? "PASS" : "FAIL"} ${width}×${height} ${scene}: scroll=${scroll}, clipped=${clipped.length}${clipped.length ? " [" + clipped.map(({ el }) => el.getAttribute("aria-label") || el.textContent.trim()).join(", ") + "]" : ""}, squares=${square}${board ? ", board=" + board.width.toFixed(1) + "×" + board.height.toFixed(1) : ""}`;
+          parent.postMessage(
+            { kind: "pushit-layout", report: message },
+            location.origin,
+          );
+          const status = document.createElement("div");
+          status.textContent = message;
+          status.style.cssText = `position:fixed;left:4px;bottom:2px;z-index:1000;font:9px system-ui;color:${pass ? "#226843" : "#ad3527"};pointer-events:none;max-width:calc(100% - 8px)`;
+          document.body.append(status);
+        }, 1450);
       }
     </script>
   </body>

@@ -28,6 +28,8 @@ export function createGame(starter = "black") {
     used: 0,
     winner: null,
     log: [],
+    step: 0,
+    lastAction: null,
   };
 }
 
@@ -122,6 +124,8 @@ export function act(game, action) {
       current: opposite(game.current),
       used: 0,
       turn: game.turn + 1,
+      step: (game.step || 0) + 1,
+      lastAction: { type: "end", changes: [] },
     };
   }
   if (!["left", "right", "forward"].includes(action?.type))
@@ -135,6 +139,7 @@ export function act(game, action) {
     log: [...game.log],
   };
   const moving = next.pieces.find((p) => p.id === piece.id);
+  let displacement = [0, 0];
   const entry = {
     turn: game.turn,
     color: game.current,
@@ -145,6 +150,7 @@ export function act(game, action) {
   if (action.type === "forward") {
     const move = forwardMove(game, piece.id);
     if (!move.legal) throw new Error(move.reason);
+    displacement = [move.dx, move.dy];
     for (const p of next.pieces)
       if (p.id === piece.id || move.pushed.includes(p.id)) {
         p.x += move.dx;
@@ -163,6 +169,32 @@ export function act(game, action) {
   } else
     moving.facing = (moving.facing + (action.type === "right" ? 1 : 3)) % 4;
   next.log.push(entry);
+  next.step = (game.step || 0) + 1;
+  next.lastAction = {
+    type: action.type,
+    pieceId: piece.id,
+    rotation: action.type === "left" ? -90 : action.type === "right" ? 90 : 0,
+    changes: game.pieces.flatMap((from) => {
+      const to = next.pieces.find((p) => p.id === from.id);
+      if (to && to.x === from.x && to.y === from.y && to.facing === from.facing)
+        return [];
+      return [
+        {
+          id: from.id,
+          color: from.color,
+          from: { ...from },
+          to: to
+            ? { ...to }
+            : {
+                ...from,
+                x: from.x + displacement[0],
+                y: from.y + displacement[1],
+              },
+          removed: !to,
+        },
+      ];
+    }),
+  };
   next.log = next.log.slice(-90);
   next.used++;
   if (next.used === 3 && !next.winner) {

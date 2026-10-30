@@ -1,109 +1,258 @@
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../components/Dialog.jsx";
-import { MenuButton } from "../components/MenuButton.jsx";
 import { SoundToggle } from "../components/SoundToggle.jsx";
 import { getProfile, readJSON, writeJSON } from "../game/storage.js";
 import { readTabState, writeTabState } from "../game/navigation.js";
 import { playSound, resultSound } from "../game/audio.js";
+import { createGame } from "./engine.js";
 import {
-  act,
-  coordinate,
-  createGame,
-  describeAction,
-  forwardMove,
-  validGame,
-} from "./engine.js";
+  newMatch,
+  nextRound,
+  playMatch,
+  resetRound,
+  restoreLocalMatch,
+  undoMatch,
+} from "./match.js";
 import { PushBoard, PushPiece } from "./PushBoard.jsx";
+import { usePushRoom } from "./usePushRoom.js";
 import "./pushit.css";
 
-const titleCase = (value) => value[0].toUpperCase() + value.slice(1);
-const savedGame = () => {
-  const saved = readJSON("pushit:local:v1", null);
-  return validGame(saved) ? saved : null;
-};
-
-function Rules({ onClose }) {
+const cap = (value) => value[0].toUpperCase() + value.slice(1);
+const reducedMotion = () =>
+  !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+export function FormatPicker({ value, onChange, disabled = false }) {
   return (
-    <Dialog title="How to play PushIt" onClose={onClose} className="push-rules">
-      <p className="push-rule-intro">
-        Six pieces. Sixteen squares. One push to win.
-      </p>
-      <h3>01 · Set up</h3>
-      <p>
-        Use the arrangement below. The sun dot marks each piece’s front. The
-        person who most recently saw a sunrise starts and chooses Black or
-        White.
-      </p>
-      <PushBoard game={createGame()} small />
-      <h3>02 · Take one or three actions</h3>
-      <p>
-        On every turn, use exactly <strong>one or three</strong> actions, spread
-        across any of your pieces. After one, end your turn or continue. After
-        two, you must take a third.
-      </p>
-      <div className="push-rule-actions">
-        <div>
-          <b>↶ Rotate</b>
-          <p>Turn a piece 90° left or right. A half-turn costs two actions.</p>
-        </div>
-        <div>
-          <b>↑ Move</b>
-          <p>
-            Advance one square toward its sun. You cannot move yourself off the
-            board.
-          </p>
-        </div>
-        <div>
-          <b>⇢ Push</b>
-          <p>
-            Advance into a piece to move the entire touching row one square,
-            including friendly pieces. This costs one action.
-          </p>
-        </div>
-      </div>
-      <h3>03 · Protect your front</h3>
-      <p>
-        A push is blocked if{" "}
-        <strong>any piece in the row faces the pusher</strong>, even a friendly
-        piece farther along the row. Pushed pieces keep their facing direction.
-      </p>
+    <div className="push-format">
       <div
-        className="push-example"
-        aria-label="An upward-facing piece cannot push a downward-facing piece above it"
+        className="push-format-options"
+        role="group"
+        aria-label="Match format"
       >
-        <span>↓</span>
-        <span>↑</span>
-        <b>Front to front = blocked</b>
+        {[0, 3, 5, 7, value >= 9 ? value : 9].map((n) => (
+          <button
+            key={n}
+            aria-pressed={value === n}
+            disabled={disabled}
+            onClick={() => onChange(n)}
+          >
+            {n ? `Best of ${n}` : "Free play"}
+          </button>
+        ))}
       </div>
-      <h3>04 · Push one opponent off to win</h3>
-      <p>
-        The game ends immediately when you push an opposing piece over the edge,
-        even before your third action. Removing your own piece does not count as
-        a win. If both players agree the position is stuck, reset together.
-      </p>
-      <button className="primary" onClick={onClose}>
-        Got it · let’s play
-      </button>
+      {value >= 9 && (
+        <div className="push-format-stepper">
+          <button
+            aria-label="Shorter series"
+            disabled={disabled}
+            onClick={() => onChange(value - 2)}
+          >
+            −
+          </button>
+          <strong>Best of {value}</strong>
+          <button
+            aria-label="Longer series"
+            disabled={disabled || value >= 99}
+            onClick={() => onChange(value + 2)}
+          >
+            +
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+function ColorSwitch({ value, onChange, disabled }) {
+  return (
+    <div className="push-color-switch" role="group" aria-label="Your color">
+      {["black", "white"].map((color) => (
+        <button
+          key={color}
+          aria-label={`Play as ${cap(color)}`}
+          aria-pressed={value === color}
+          disabled={disabled}
+          onClick={() => onChange(color)}
+        >
+          <span className={`push-color-dot ${color}`} />
+          {cap(color)}
+        </button>
+      ))}
+    </div>
+  );
+}
+export function Rules({ onClose }) {
+  const [page, setPage] = useState(0);
+  const pages = [
+    {
+      title: "Push one opponent off to win.",
+      text: "On your turn, take exactly 1 or 3 actions. Tap your piece, then move forward or rotate 90°.",
+      visual: <PushBoard game={createGame()} small />,
+    },
+    {
+      title: "Push a whole row.",
+      text: "A forward move pushes every touching piece in that direction. A piece facing you blocks the entire push — even your own.",
+      visual: (
+        <div className="push-rule-demo">
+          <PushPiece color="black" facing={1} />
+          <span>⇢</span>
+          <PushPiece color="white" facing={0} />
+          <PushPiece color="white" facing={1} />
+        </div>
+      ),
+    },
+    {
+      title: "One action, or all three.",
+      text: "After one action, you can end your turn. After two, you must take a third. You can’t move yourself off the edge. Online undo needs your opponent’s approval.",
+      visual: (
+        <div className="push-rule-count">
+          <span>1</span>
+          <b>or</b>
+          <span>3</span>
+        </div>
+      ),
+    },
+  ];
+  return (
+    <Dialog
+      title="How to play"
+      onClose={onClose}
+      className="push-dialog push-rules"
+    >
+      <div className="push-guide-page">
+        {pages[page].visual}
+        <h3>{pages[page].title}</h3>
+        <p>{pages[page].text}</p>
+      </div>
+      <div className="push-guide-nav">
+        <button onClick={() => (page ? setPage(page - 1) : onClose())}>
+          {page ? "← Back" : "Close"}
+        </button>
+        <span>
+          {page + 1} / {pages.length}
+        </span>
+        <button
+          className="primary"
+          onClick={() => (page === 2 ? onClose() : setPage(page + 1))}
+        >
+          {page === 2 ? "Play →" : "Next →"}
+        </button>
+      </div>
     </Dialog>
   );
 }
-
-async function api(path, token, body, signal) {
-  const response = await fetch(`/api/pushit/rooms${path}`, {
-    method: body ? "POST" : "GET",
-    headers: {
-      ...(body ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    cache: "no-store",
-    signal,
-  });
-  const data = await response
-    .json()
-    .catch(() => ({ error: "Online play is unavailable. Please try again." }));
-  if (!response.ok) throw new Error(data.error || "Request failed.");
-  return data;
+function MatchScore({ match, name, online, myColor }) {
+  const current = match.game.current;
+  const ownTurn = match.phase === "playing" && (!online || current === myColor);
+  return (
+    <div
+      className="push-match-score"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {["black", "white"].map((color, i) => (
+        <div
+          key={color}
+          className={`push-score-side ${color} ${match.phase === "playing" && current === color ? "active" : ""}`}
+          style={{ gridColumn: i ? 3 : 1 }}
+        >
+          <span className={`push-color-dot ${color}`} />
+          <strong>{name(color)}</strong>
+          {online && color === myColor && <span className="push-you">You</span>}
+        </div>
+      ))}
+      <div className="push-score-middle">
+        <b aria-label={`Score ${match.wins.black} to ${match.wins.white}`}>
+          {match.wins.black}
+          <span>:</span>
+          {match.wins.white}
+        </b>
+        <span className={`push-turn-label ${ownTurn ? "is-yours" : ""}`}>
+          {match.game.winner
+            ? "ROUND OVER"
+            : online
+              ? ownTurn
+                ? "YOUR TURN"
+                : "OPPONENT’S TURN"
+              : `${cap(current)}’s turn`}
+        </span>
+      </div>
+    </div>
+  );
+}
+function Victory({
+  match,
+  name,
+  online,
+  waiting,
+  onNext,
+  onClose,
+  onUndo,
+  canUndo,
+  busy,
+}) {
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+  const winner = match.matchWinner || match.game.winner;
+  return (
+    <Dialog
+      title={`${name(winner)} wins!`}
+      onClose={onClose}
+      className={`push-dialog push-victory ${settled ? "is-settled" : ""}`}
+    >
+      <div className="push-win-art" aria-hidden="true">
+        <div className="push-win-ring" />
+        <PushPiece color={winner} />
+        {Array.from({ length: 14 }, (_, i) => (
+          <i
+            key={i}
+            style={{
+              "--i": i,
+              "--confetti-color": ["#ffd253", "#65c9ea", "#fa9180"][i % 3],
+            }}
+          />
+        ))}
+        <span>✦</span>
+      </div>
+      <span className="push-result-label">
+        {match.matchWinner
+          ? `BEST OF ${match.bestOf} · SERIES WON`
+          : `ROUND ${match.round}`}
+      </span>
+      <div className="push-result-score">
+        <span>
+          <i className="push-color-dot black" />
+          {name("black")}
+        </span>
+        <b key={`${match.wins.black}:${match.wins.white}`}>
+          {match.wins.black} : {match.wins.white}
+        </b>
+        <span>
+          <i className="push-color-dot white" />
+          {name("white")}
+        </span>
+      </div>
+      <button
+        className="primary push-next-round"
+        disabled={busy || waiting}
+        onClick={onNext}
+      >
+        {waiting
+          ? "Waiting for opponent…"
+          : match.matchWinner
+            ? "New series →"
+            : "Next round →"}
+      </button>
+      <div className="push-result-actions">
+        <button onClick={onClose}>See board</button>
+        <button disabled={!canUndo || busy} onClick={onUndo}>
+          {online ? "Request undo" : "Undo"}
+        </button>
+      </div>
+    </Dialog>
+  );
 }
 
 export function PushIt() {
@@ -111,271 +260,228 @@ export function PushIt() {
     () => new URLSearchParams(location.search).get("room") || "",
   );
   const [profile, setProfile] = useState(getProfile);
-  const [local, setLocal] = useState(savedGame);
-  const [credentials, setCredentials] = useState(() => {
-    const saved = readJSON("pushit:room", null);
-    return saved?.profileId === profile.id &&
-      (!initialCode || initialCode === saved.code)
-      ? saved
-      : null;
-  });
   const [screen, setScreen] = useState(() =>
     /^\d{4}$/.test(initialCode)
       ? "online"
       : readTabState("pushit:view", "menu"),
   );
-  const [room, setRoom] = useState(null);
-  const [name, setName] = useState(profile.name || "");
-  const [code, setCode] = useState(initialCode);
-  const [starter, setStarter] = useState("black");
-  const [hostColor, setHostColor] = useState("black");
+  const online = screen === "online";
+  const service = usePushRoom(profile, initialCode, online);
+  const { room, credentials, busy, error, setError, send } = service;
+  const [local, setLocal] = useState(() =>
+    restoreLocalMatch(
+      readJSON("pushit:match:v2", null),
+      readJSON("pushit:local:v1", null),
+    ),
+  );
+  const match = online ? room : local;
+  const game = match?.game;
+  const [code, setCode] = useState(initialCode),
+    [name, setName] = useState(profile.name);
+  const [nameOpen, setNameOpen] = useState(
+    !profile.name && /^\d{4}$/.test(initialCode),
+  );
+  const pendingName = useRef(
+    !profile.name && /^\d{4}$/.test(initialCode) ? "join" : null,
+  );
+  const [rules, setRules] = useState(false),
+    [setup, setSetup] = useState(false),
+    [leave, setLeave] = useState(false),
+    [reset, setReset] = useState(false);
+  const [bestOf, setBestOf] = useState(0),
+    [selected, setSelected] = useState(null),
+    [copied, setCopied] = useState(false);
   const [rotateBoard, setRotateBoard] = useState(
     () => readJSON("pushit:rotate-board", false) === true,
   );
-  const [selected, setSelected] = useState(null);
-  const [undo, setUndo] = useState([]);
-  const [rules, setRules] = useState(false);
-  const [setup, setSetup] = useState(false);
-  const [reset, setReset] = useState(false);
-  const [leave, setLeave] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const pending = useRef(false),
-    inFlight = useRef(null),
-    sequence = useRef(0),
-    roomRef = useRef(room);
-  roomRef.current = room;
-  const online = screen === "online";
-  const game = online ? room?.game : local;
-  const playing = online ? room?.phase === "playing" : !!game && !game.winner;
   const myColor = online ? room?.players[room.you]?.color : game?.current;
-  const isMyTurn = playing && (!online || game.current === myColor);
-  const canPlay = isMyTurn && !busy;
-  const perspective = online
+  const desiredView = online
     ? myColor || "white"
     : rotateBoard
       ? game?.current || "white"
       : "white";
-  const chosen = game?.pieces.find((p) => p.id === selected);
-  const move = chosen ? forwardMove(game, chosen.id) : null;
+  const [view, setView] = useState(desiredView),
+    [boardAngle, setBoardAngle] = useState(desiredView === "black" ? 180 : 0),
+    [rotating, setRotating] = useState(false);
+  const lastViewTurn = useRef(game?.turn),
+    firstView = useRef(true),
+    lastViewGame = useRef(match?.gameId),
+    lastRotateSetting = useRef(rotateBoard);
+  const playing = match?.phase === "playing";
+  const isMyTurn = playing && (!online || game.current === myColor);
+  const blocked = !!room?.undoRequest;
+  const canPlay = isMyTurn && !busy && !rotating && !blocked;
   const playerName = (color) =>
     online
-      ? room?.players.find((p) => p.color === color)?.name || titleCase(color)
-      : titleCase(color);
-  const turnLabel = game?.winner
-    ? `${playerName(game.winner)} wins!`
-    : online && room?.phase === "waiting"
-      ? "Waiting for your friend"
-      : online
-        ? isMyTurn
-          ? "Your turn"
-          : "Opponent’s turn"
-        : game
-          ? `${playerName(game.current)} to play`
-          : "";
-
-  const lastTurn = useRef(null);
+      ? room?.players.find((p) => p.color === color)?.name || cap(color)
+      : cap(color);
+  const canUndo = online ? room?.canUndo : !!local?.undoStack.length;
+  const showName = (action) => {
+    pendingName.current = action;
+    setName(profile.name);
+    setNameOpen(true);
+  };
+  const home = () => {
+    setScreen("menu");
+    setError("");
+    setResultOpen(false);
+    window.history.replaceState(null, "", "/pushit");
+  };
+  const openOnline = () =>
+    profile.name ? setScreen("online") : showName("online");
   useEffect(() => {
-    const turnId =
-      online && playing ? `${room.id}:${room.round}:${game.turn}` : null;
-    if (turnId && lastTurn.current !== turnId && isMyTurn) playSound("turn");
-    lastTurn.current = turnId;
-    document.title =
-      screen !== "menu" && game
-        ? `${turnLabel} · PushIt`
-        : "PushIt · A game of one or three";
-  }, [
-    online,
-    playing,
-    isMyTurn,
-    game?.turn,
-    game?.winner,
-    room?.id,
-    room?.round,
-    screen,
-    turnLabel,
-  ]);
-
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="description"]');
-    if (meta)
-      meta.content =
-        "A two-player strategy game. Rotate, move and push. Take one or three actions and push an opponent off to win.";
-  }, []);
+    writeJSON("shapeit:profile", profile);
+  }, [profile]);
   useEffect(() => {
     writeTabState("pushit:view", screen);
+    setSelected(null);
   }, [screen]);
+  useEffect(() => {
+    if (local) {
+      writeJSON("pushit:match:v2", local);
+      writeJSON("pushit:local:v1", local.game);
+    }
+  }, [local]);
   useEffect(() => {
     writeJSON("pushit:rotate-board", rotateBoard);
   }, [rotateBoard]);
   useEffect(() => {
-    if (local) writeJSON("pushit:local:v1", local);
-  }, [local]);
-  useEffect(() => {
     setSelected(null);
-    setUndo([]);
-  }, [game?.turn, room?.round, screen]);
+  }, [game?.turn, match?.gameId]);
   useEffect(() => {
-    if (game?.winner && screen !== "menu") {
-      setResultOpen(true);
-      return resultSound(true);
+    if (firstView.current && !game) return;
+    const initial = firstView.current;
+    firstView.current = false;
+    const changedTurn = lastViewTurn.current !== game?.turn;
+    const changedRound = lastViewGame.current !== match?.gameId;
+    const wasRotating = lastRotateSetting.current;
+    lastViewTurn.current = game?.turn;
+    lastViewGame.current = match?.gameId;
+    lastRotateSetting.current = rotateBoard;
+    if (initial || changedRound) {
+      setView(desiredView);
+      setBoardAngle(desiredView === "black" ? 180 : 0);
+      setRotating(false);
+      return;
     }
-    setResultOpen(false);
-  }, [game?.winner, room?.round, screen]);
-
-  const request = async (path, token, body) => {
-    if (pending.current) {
-      if (!body || inFlight.current?.mutation) return null;
-      // A player action takes priority over a background poll.
-      inFlight.current?.controller.abort();
-    }
-    const controller = new AbortController();
-    const flight = { controller, mutation: !!body };
-    const timeout = setTimeout(
-      () =>
-        controller.abort(
-          new DOMException("Connection timed out. Retrying…", "TimeoutError"),
-        ),
-      12000,
+    if (desiredView === view) return;
+    setRotating(true);
+    setSelected(null);
+    const delay =
+      !online && rotateBoard && wasRotating && changedTurn ? 1000 : 0;
+    const timer = setTimeout(() => {
+      setView(desiredView);
+      setBoardAngle((angle) => angle + 180);
+    }, delay);
+    const done = setTimeout(
+      () => setRotating(false),
+      delay + (reducedMotion() ? 1 : 440),
     );
-    inFlight.current = flight;
-    pending.current = true;
-    if (body) setBusy(true);
-    const current = ++sequence.current;
-    try {
-      const data = await api(path, token, body, controller.signal);
-      if (current !== sequence.current) return null;
-      if (
-        !roomRef.current ||
-        data.room.revision >= roomRef.current.revision ||
-        data.room.id !== roomRef.current.id
-      )
-        setRoom(data.room);
-      setError("");
-      return data;
-    } catch (e) {
-      if (current === sequence.current && e.name !== "AbortError")
-        setError(
-          e.name === "TimeoutError"
-            ? "Connection timed out. Retrying…"
-            : e.message,
-        );
-      return null;
-    } finally {
-      clearTimeout(timeout);
-      if (inFlight.current === flight) {
-        pending.current = false;
-        inFlight.current = null;
-        if (body) setBusy(false);
-      }
-    }
-  };
-  useEffect(() => {
-    if (!credentials || !online) return;
-    const poll = () => {
-      void request(`/${credentials.code}`, credentials.token);
-    };
-    poll();
-    const timer = setInterval(poll, 1500);
-    window.addEventListener("online", poll);
     return () => {
-      clearInterval(timer);
-      window.removeEventListener("online", poll);
-      sequence.current++;
+      clearTimeout(timer);
+      clearTimeout(done);
     };
-  }, [credentials, online]);
-
-  const goHome = () => {
-    setScreen("menu");
-    setError("");
-    window.history.replaceState(null, "", "/pushit");
-  };
-  const beginLocal = () => {
-    setLocal(createGame(starter));
-    setSelected(null);
-    setUndo([]);
-    setSetup(false);
-    setReset(false);
-    setError("");
-    setScreen("local");
-  };
-  const send = (body) =>
-    request(`/${credentials.code}/action`, credentials.token, {
-      ...body,
-      revision: room.revision,
-    });
-  const takeAction = async (type) => {
-    if (!canPlay) return;
-    const action = { type, ...(type !== "end" ? { pieceId: selected } : {}) };
-    if (online) {
-      const data = await send(action);
-      if (data)
-        playSound(
-          type === "end" || data.room.game.turn !== game.turn ? "turn" : "draw",
-        );
-    } else {
-      try {
-        const next = act(local, action);
-        setUndo(
-          next.turn === local.turn && !next.winner ? [...undo, local] : [],
-        );
-        setLocal(next);
-        setError("");
-        playSound(next.turn !== local.turn ? "turn" : "draw");
-      } catch (e) {
-        setError(e.message);
-      }
-    }
-  };
-  const enterRoom = async (join) => {
-    const nextProfile = { ...profile, name: name.trim().slice(0, 24) };
-    if (!nextProfile.name) {
-      setError("Choose your name first.");
+  }, [desiredView, match?.gameId, online, rotateBoard]);
+  useEffect(() => {
+    setResultOpen(false);
+    if (!game?.winner || screen === "menu" || room?.undoRequest) return;
+    const cancel = resultSound(true);
+    const timer = setTimeout(
+      () => setResultOpen(true),
+      reducedMotion() ? 100 : 1100,
+    );
+    return () => {
+      clearTimeout(timer);
+      cancel();
+    };
+  }, [game?.winner, match?.gameId, screen, room?.undoRequest?.by]);
+  const lastTurn = useRef(null);
+  useEffect(() => {
+    const key = online && playing ? `${room.gameId}:${game.turn}` : null;
+    if (key && key !== lastTurn.current && isMyTurn) playSound("turn");
+    lastTurn.current = key;
+    document.title =
+      game && screen !== "menu" && match.phase !== "lobby"
+        ? `${game.winner ? `${playerName(game.winner)} wins!` : online ? (isMyTurn ? "Your turn" : "Opponent’s turn") : `${cap(game.current)} to play`} · PushIt`
+        : "PushIt";
+  }, [
+    screen,
+    game?.turn,
+    game?.winner,
+    match?.gameId,
+    match?.phase,
+    online,
+    isMyTurn,
+  ]);
+  const enter = async (join, nextProfile = profile) => {
+    if (!nextProfile.name.trim()) {
+      showName(join ? "join" : "create");
       return;
     }
     if (join && !/^\d{4}$/.test(code)) {
       setError("Enter a four-digit room code.");
       return;
     }
-    const data = await request(join ? `/${code}/join` : "", null, {
-      profile: nextProfile,
-      hostColor,
-      starter,
-    });
-    if (!data) return;
-    setProfile(nextProfile);
-    writeJSON("shapeit:profile", nextProfile);
-    const access = {
-      code: data.room.code,
-      token: data.token,
-      profileId: profile.id,
-    };
-    writeJSON("pushit:room", access);
-    setCredentials(access);
-    window.history.replaceState(null, "", `/pushit?room=${access.code}`);
+    await service.enter(join ? code : "", nextProfile);
   };
-  const disconnect = async () => {
-    if (busy || pending.current) return;
-    if (room && room.phase !== "closed") {
-      const data = await send({ type: "leave" });
-      if (!data) return;
+  const saveName = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    const next = { ...profile, name: name.trim().slice(0, 24) };
+    setProfile(next);
+    writeJSON("shapeit:profile", next);
+    setNameOpen(false);
+    const action = pendingName.current;
+    pendingName.current = null;
+    if (action) setScreen("online");
+    if (action === "join" || action === "create")
+      await enter(action === "join", next);
+  };
+  const changeLocal = (fn) => {
+    const next = structuredClone(local);
+    fn(next);
+    setLocal(next);
+  };
+  const takeAction = async (type) => {
+    if (!canPlay) return;
+    const body = { type, ...(type === "end" ? {} : { pieceId: selected }) };
+    if (online) {
+      if (await send(body)) playSound(type === "end" ? "turn" : "draw");
+    } else
+      try {
+        changeLocal((next) => playMatch(next, body, game.current));
+        playSound(type === "end" ? "turn" : "draw");
+      } catch (e) {
+        setError(e.message);
+      }
+  };
+  const undo = async () => {
+    if (!canUndo || busy || rotating) return;
+    if (online) {
+      if (await send({ type: "undo" })) setResultOpen(false);
+    } else {
+      changeLocal(undoMatch);
+      setResultOpen(false);
+      setSelected(null);
     }
-    sequence.current++;
-    writeJSON("pushit:room", null);
-    setCredentials(null);
-    setRoom(null);
-    setLeave(false);
-    goHome();
   };
-  const forgetRoom = () => {
-    sequence.current++;
-    writeJSON("pushit:room", null);
-    setCredentials(null);
-    setRoom(null);
+  const advance = async () => {
+    if (online) {
+      if (await send({ type: match.matchWinner ? "new-series" : "rematch" }))
+        setResultOpen(false);
+    } else {
+      if (local.matchWinner) setLocal(newMatch(local.bestOf));
+      else changeLocal(nextRound);
+      setResultOpen(false);
+    }
+  };
+  const beginLocal = () => {
+    setLocal(newMatch(bestOf));
+    setSetup(false);
+    setScreen("local");
+    setSelected(null);
     setError("");
-    window.history.replaceState(null, "", "/pushit");
   };
   const copyLink = async () => {
     try {
@@ -384,209 +490,189 @@ export function PushIt() {
       );
       setCopied(true);
     } catch {
-      setError("Copy the invite link below to share this room.");
+      setError(`Room code: ${room.code}`);
     }
   };
-
   const header = (
-    <header className="topbar push-header">
-      <MenuButton onClick={goHome} />
-      <a href="/pushit" className="push-wordmark">
+    <header className="push-topbar">
+      <button
+        className="push-wordmark"
+        onClick={home}
+        aria-label="PushIt main menu"
+      >
         Push<span>It</span>
-      </a>
+      </button>
       <div>
+        {online && room && (
+          <span className="push-room-label">#{room.code}</span>
+        )}
         <button
           className="push-help"
-          onClick={() => setRules(true)}
           aria-label="How to play"
+          onClick={() => setRules(true)}
         >
           ?
         </button>
         <SoundToggle compact />
+        {online && credentials && (
+          <button
+            className="push-leave-icon"
+            aria-label="Leave room"
+            onClick={() => setLeave(true)}
+          >
+            ×
+          </button>
+        )}
       </div>
     </header>
   );
-  const errorMessage = error && (
-    <p className="push-error" role="alert">
-      {error}
-    </p>
-  );
   const overlays = (
     <>
+      {nameOpen && (
+        <Dialog
+          title="Your name"
+          onClose={() => {
+            setNameOpen(false);
+            pendingName.current = null;
+          }}
+          className="push-dialog"
+        >
+          <form className="push-name-form" onSubmit={saveName}>
+            <label>
+              Name
+              <input
+                autoFocus
+                autoComplete="nickname"
+                maxLength={24}
+                placeholder="Enter your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+            <button className="primary" type="submit">
+              Save name
+            </button>
+          </form>
+        </Dialog>
+      )}
       {rules && <Rules onClose={() => setRules(false)} />}
       {setup && (
-        <Dialog title="Play on one device" onClose={() => setSetup(false)}>
-          <p>
-            Black and White share this board. Pass the device after each turn.
-          </p>
-          <p className="muted">
-            The player who last saw a sunrise chooses their color and starts.
-          </p>
-          <label>
-            Starting side
-            <select
-              value={starter}
-              onChange={(e) => setStarter(e.target.value)}
-            >
-              <option value="black">Black starts</option>
-              <option value="white">White starts</option>
-            </select>
-          </label>
+        <Dialog
+          title={local ? "New match" : "Same device"}
+          onClose={() => setSetup(false)}
+          className="push-dialog"
+        >
+          <FormatPicker value={bestOf} onChange={setBestOf} />
           <button className="primary" onClick={beginLocal}>
-            Start game →
+            Start match →
           </button>
+        </Dialog>
+      )}
+      {leave && (
+        <Dialog
+          title="Leave room?"
+          onClose={() => setLeave(false)}
+          className="push-dialog"
+        >
+          <div className="button-row">
+            <button onClick={() => setLeave(false)}>Stay</button>
+            <button
+              className="primary"
+              onClick={() => {
+                service.forget(true);
+                setLeave(false);
+                home();
+              }}
+            >
+              Leave
+            </button>
+          </div>
         </Dialog>
       )}
       {reset && (
         <Dialog
-          title={online ? "Reset this board?" : "Start a new game?"}
+          title={online ? "Offer a reset?" : "Reset this round?"}
           onClose={() => setReset(false)}
+          className="push-dialog"
         >
-          <p>
-            {online
-              ? "A reset starts a fresh board only when both players agree. It does not award a win."
-              : "This replaces your saved board. Choose who starts the new game."}
-          </p>
-          {!online && (
-            <label>
-              Starting side
-              <select
-                value={starter}
-                onChange={(e) => setStarter(e.target.value)}
-              >
-                <option value="black">Black starts</option>
-                <option value="white">White starts</option>
-              </select>
-            </label>
-          )}
           <div className="button-row">
-            <button onClick={() => setReset(false)}>Keep playing</button>
+            <button onClick={() => setReset(false)}>Cancel</button>
             <button
               className="primary"
+              disabled={busy}
               onClick={async () => {
                 if (online) {
                   if (await send({ type: "reset" })) setReset(false);
-                } else beginLocal();
-              }}
-            >
-              {online ? "Offer reset" : "New game"}
-            </button>
-          </div>
-          {errorMessage}
-        </Dialog>
-      )}
-      {leave && (
-        <Dialog title="Leave this room?" onClose={() => setLeave(false)}>
-          <p>
-            Leaving closes the room for both players. An unfinished game does
-            not award a win.
-          </p>
-          <div className="button-row">
-            <button onClick={() => setLeave(false)}>Stay</button>
-            <button className="primary" disabled={busy} onClick={disconnect}>
-              Leave room
-            </button>
-          </div>
-          {errorMessage}
-        </Dialog>
-      )}
-      {resultOpen && game?.winner && (
-        <Dialog
-          title={`${playerName(game.winner)} wins!`}
-          onClose={() => setResultOpen(false)}
-          className="push-result"
-        >
-          <div className="push-trophy" aria-hidden="true">
-            ✦
-          </div>
-          <p>An opponent’s piece is off the board.</p>
-          <p className="muted">
-            {game.turn} turns · {titleCase(game.winner)} brought the final push.
-          </p>
-          <div className="button-row">
-            <button onClick={() => setResultOpen(false)}>See board</button>
-            <button
-              className="primary"
-              disabled={busy || (online && room.rematch.includes(room.you))}
-              onClick={() => {
-                if (online) void send({ type: "rematch" });
-                else {
-                  setResultOpen(false);
-                  setSetup(true);
+                } else {
+                  changeLocal(resetRound);
+                  setReset(false);
                 }
               }}
             >
-              {online && room.rematch.includes(room.you)
-                ? "Waiting for rematch…"
-                : "Play again →"}
+              Reset round
             </button>
           </div>
-          {errorMessage}
         </Dialog>
+      )}
+      {resultOpen && game?.winner && (
+        <Victory
+          match={match}
+          name={playerName}
+          online={online}
+          waiting={online && room.rematch.includes(room.you)}
+          onNext={advance}
+          onClose={() => setResultOpen(false)}
+          onUndo={undo}
+          canUndo={canUndo}
+          busy={busy || blocked}
+        />
       )}
     </>
   );
-
-  if (screen === "menu" || (!online && !game))
+  const errorMessage = error && (
+    <div className="push-error" role="alert">
+      <span>{error}</span>
+      <button aria-label="Dismiss error" onClick={() => setError("")}>
+        ×
+      </button>
+    </div>
+  );
+  if (screen === "menu" || (!online && !local))
     return (
-      <main className="arcade-menu push-menu">
-        <header className="menu-top">
-          <a className="push-back-shape" href="/">
-            ← ShapeIt
-          </a>
-          <div className="game-title">
-            <h1>
-              Push<span>It</span>
-            </h1>
-          </div>
-          <p className="push-tagline">A game of one or three.</p>
-        </header>
-        <div className="push-menu-preview" aria-hidden="true">
-          <PushPiece color="black" facing={1} />
-          <span>⇢</span>
-          <PushPiece color="white" facing={0} />
+      <main className="push-app push-home">
+        <div className="push-home-top">
+          <a href="/">← ShapeIt</a>
+          <button
+            className="push-profile-button"
+            onClick={() => showName(null)}
+          >
+            {profile.name || "Choose your name"}{" "}
+            <span aria-hidden="true">✎</span>
+          </button>
         </div>
-        <nav className="arcade-modes push-modes" aria-label="PushIt game modes">
+        <div className="push-home-title">
+          <h1>
+            Push<span>It</span>
+          </h1>
+        </div>
+        <nav className="push-home-modes" aria-label="PushIt game modes">
           <button
             className="arcade-mode daily-mode"
-            onClick={() =>
-              local && !local.winner ? setScreen("local") : setSetup(true)
-            }
+            onClick={() => (local ? setScreen("local") : setSetup(true))}
           >
             <span className="mode-icon" aria-hidden="true">
               ◧
             </span>
-            <span>
-              <strong>
-                {local && !local.winner ? "Resume game" : "Same device"}
-              </strong>
-              <small>
-                {local && !local.winner
-                  ? `Turn ${local.turn} · ${titleCase(local.current)} to play`
-                  : "Two players, one board"}
-              </small>
-            </span>
-            <span aria-hidden="true">▶</span>
+            <strong>{local ? "Continue game" : "Same device"}</strong>
+            <span>▶</span>
           </button>
-          <button
-            className="arcade-mode train-mode"
-            onClick={() => {
-              setScreen("online");
-              setError("");
-            }}
-          >
+          <button className="arcade-mode train-mode" onClick={openOnline}>
             <span className="mode-icon" aria-hidden="true">
               ⚔
             </span>
-            <span>
-              <strong>{credentials ? "Rejoin room" : "Play a friend"}</strong>
-              <small>
-                {credentials
-                  ? `Room ${credentials.code}`
-                  : "A private online duel"}
-              </small>
-            </span>
-            <span aria-hidden="true">▶</span>
+            <strong>{credentials ? "Rejoin room" : "Play a friend"}</strong>
+            <span>▶</span>
           </button>
           <button
             className="arcade-mode duel-mode"
@@ -595,93 +681,38 @@ export function PushIt() {
             <span className="mode-icon" aria-hidden="true">
               ?
             </span>
-            <span>
-              <strong>How to play</strong>
-              <small>Rotate. Move. Push to win.</small>
-            </span>
-            <span aria-hidden="true">↗</span>
+            <strong>How to play</strong>
+            <span>↗</span>
           </button>
         </nav>
-        <p className="push-menu-objective">
-          Push one opposing piece off the board to win.
-        </p>
         <footer className="menu-credit">Robin &amp; Sam</footer>
+        {errorMessage}
         {overlays}
       </main>
     );
-
   if (online && !room)
     return (
-      <main className="app-shell push-shell">
+      <main className="push-app">
         {header}
-        <section className="card push-lobby">
-          <span className="push-eyebrow">PRIVATE DUEL</span>
-          <h2>
-            {credentials
-              ? `Reconnecting to room ${credentials.code}`
-              : "A friend. A board. A little rivalry."}
-          </h2>
-          {errorMessage}
+        <section className="push-connect card">
+          <h2>{credentials ? "Reconnecting…" : "Play a friend"}</h2>
           {credentials ? (
-            <>
-              <p className="muted">
-                Your seat and game are saved in this browser.
-              </p>
-              <button onClick={forgetRoom} disabled={busy}>
-                Use another room
-              </button>
-            </>
+            <button onClick={() => service.forget()}>Use another room</button>
           ) : (
             <>
-              <label>
-                Your name
-                <input
-                  value={name}
-                  maxLength={24}
-                  placeholder="Choose your name"
-                  autoComplete="nickname"
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </label>
-              <div className="push-room-options">
-                <label>
-                  Your side
-                  <select
-                    value={hostColor}
-                    onChange={(e) => setHostColor(e.target.value)}
-                  >
-                    <option value="black">Black</option>
-                    <option value="white">White</option>
-                  </select>
-                </label>
-                <label>
-                  Starting side
-                  <select
-                    value={starter}
-                    onChange={(e) => setStarter(e.target.value)}
-                  >
-                    <option value="black">Black starts</option>
-                    <option value="white">White starts</option>
-                  </select>
-                </label>
-              </div>
-              <p className="small muted">
-                The player who last saw a sunrise chooses their side and starts.
-              </p>
               <button
                 className="primary"
                 disabled={busy}
-                onClick={() => enterRoom(false)}
+                onClick={() => enter(false)}
               >
                 {busy ? "Connecting…" : "Create room →"}
               </button>
-              <div className="push-divider">or join a friend</div>
               <form
+                className="push-join"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void enterRoom(true);
+                  void enter(true);
                 }}
-                className="push-join"
               >
                 <label>
                   Room code
@@ -690,321 +721,260 @@ export function PushIt() {
                     pattern="[0-9]{4}"
                     maxLength={4}
                     value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                     placeholder="0000"
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                     required
                   />
                 </label>
-                <button type="submit" disabled={busy || code.length !== 4}>
-                  Join room
-                </button>
+                <button disabled={busy || code.length !== 4}>Join →</button>
               </form>
             </>
           )}
         </section>
+        {errorMessage}
         {overlays}
       </main>
     );
-
   if (online && room.phase === "closed")
     return (
-      <main className="app-shell push-shell">
+      <main className="push-app">
         {header}
-        <section className="card push-lobby">
+        <section className="push-connect card">
           <h2>Room closed</h2>
-          <p>
-            {room.left} left the room.{" "}
-            {game.winner
-              ? "The result is saved for this room."
-              : "No win was awarded."}
-          </p>
+          <p>{room.left} left.</p>
           <button
             className="primary"
             onClick={() => {
-              forgetRoom();
-              goHome();
+              service.forget();
+              home();
             }}
           >
-            Back to PushIt
+            Main menu
           </button>
         </section>
         {overlays}
       </main>
     );
-
-  return (
-    <main className="app-shell push-shell">
-      {header}
-      {online && (
-        <div className="push-room-bar">
-          <span>
-            Room <strong>{room.code}</strong> · Round {room.round}
-          </span>
-          <button onClick={() => setLeave(true)}>Leave room</button>
-        </div>
-      )}
-      {errorMessage}
-      {online && room.phase === "waiting" && (
-        <section className="card push-invite">
-          <h2>Waiting for your friend…</h2>
-          <p>
-            You’re {titleCase(myColor)}. Share the code or invite link to start.
-          </p>
-          <div className="push-invite-code">{room.code}</div>
-          <div className="button-row">
-            <button className="primary" onClick={copyLink}>
-              {copied ? "Link copied ✓" : "Copy invite link"}
+  if (online && room.phase === "lobby")
+    return (
+      <main className="push-app">
+        {header}
+        <section className="push-lobby card">
+          <div className="push-lobby-heading">
+            <h2>Room {room.code}</h2>
+            <button onClick={copyLink}>
+              {copied ? "Copied ✓" : "Invite friend ↗"}
             </button>
           </div>
-          <input
-            aria-label="Invite link"
-            readOnly
-            value={`${location.origin}/pushit?room=${room.code}`}
-            onFocus={(e) => e.target.select()}
-          />
-          <p className="small muted">
-            Rooms last two hours. Use a second browser or device for your
-            friend.
-          </p>
-        </section>
-      )}
-      <div className="push-play-layout">
-        <section className="push-board-panel">
-          <div
-            key={`${room?.round || 0}:${game.turn}:${game.winner || "playing"}`}
-            className={`push-turn-banner ${playing ? (isMyTurn ? "is-yours" : "is-waiting") : ""}`}
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <span
-              className={`push-turn-marker ${game.winner || game.current}`}
-              aria-hidden="true"
-            />
-            <div>
-              <strong>{turnLabel}</strong>
-              <span>
-                {game.winner
-                  ? "The final push!"
-                  : `${online ? `${playerName(game.current)} · ${titleCase(game.current)} · ` : ""}Turn ${game.turn}`}
-              </span>
-            </div>
-            {playing && (
-              <span className="push-turn-state">
-                {isMyTurn ? "PLAY" : "WAIT"}
-              </span>
-            )}
-          </div>
-          <div className="push-players">
-            {["black", "white"].map((color) => (
-              <div
-                key={color}
-                className={`push-player ${playing && game.current === color ? "active" : ""} ${color}`}
-              >
-                <span
-                  className={`push-player-dot ${color}`}
-                  aria-hidden="true"
-                />
-                <span>
+          <div className="push-lobby-players">
+            {[0, 1].map((index) => {
+              const p = room.players[index];
+              return (
+                <div key={index} className="push-lobby-player">
                   <strong>
-                    {playerName(color)}
-                    {online && myColor === color ? " (you)" : ""}
+                    {p?.name || "Waiting…"}
+                    {index === room.you && <span>You</span>}
                   </strong>
-                  <small>
-                    {titleCase(color)}
-                    {online ? ` · ${room.wins[color]} wins` : ""}
-                  </small>
-                </span>
-                {playing && game.current === color && (
-                  <span className="push-turn-arrow" aria-label="Current turn">
-                    Playing
-                  </span>
-                )}
-              </div>
-            ))}
+                  {p ? (
+                    index === room.you ? (
+                      <ColorSwitch
+                        value={p.color}
+                        disabled={busy}
+                        onChange={(color) => send({ type: "color", color })}
+                      />
+                    ) : (
+                      <span className="push-opponent-color">
+                        <i className={`push-color-dot ${p.color}`} />
+                        {cap(p.color)}
+                      </span>
+                    )
+                  ) : (
+                    <div
+                      className="push-waiting-dots"
+                      aria-label="Waiting for a second player"
+                    >
+                      <i />
+                      <i />
+                      <i />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          <FormatPicker
+            value={room.bestOf}
+            disabled={busy || room.you !== 0}
+            onChange={(value) => send({ type: "format", bestOf: value })}
+          />
+          {room.you === 0 ? (
+            <button
+              className="primary"
+              disabled={busy || room.players.length !== 2}
+              onClick={() => send({ type: "start" })}
+            >
+              Start match →
+            </button>
+          ) : (
+            <p className="push-lobby-wait">Waiting for host to start</p>
+          )}
+        </section>
+        {errorMessage}
+        {overlays}
+      </main>
+    );
+  return (
+    <main className="push-app">
+      {header}
+      <section className="push-play">
+        <MatchScore
+          match={match}
+          name={playerName}
+          online={online}
+          myColor={myColor}
+        />
+        <div className="push-board-area">
           <PushBoard
+            key={match.gameId}
             game={game}
             selected={selected}
+            perspective={view}
+            boardAngle={boardAngle}
+            rotating={rotating}
             interactive={canPlay}
-            perspective={perspective}
-            onSelect={(id) => {
-              setSelected(id);
-              setError("");
-            }}
+            onSelect={setSelected}
             onForward={() => takeAction("forward")}
             onRotate={takeAction}
           />
-          <p className="push-board-caption">
-            <span aria-hidden="true">●</span> The sun marks the front. A piece’s
-            front cannot be pushed.
-          </p>
-        </section>
-        <aside className="push-sidebar">
-          <section
-            className={`card push-turn-card ${isMyTurn ? "is-yours" : ""}`}
-          >
-            <span className="push-eyebrow">
-              {game.winner ? "GAME OVER" : `TURN ${game.turn}`}
-            </span>
-            <h2>
-              {game.winner
-                ? `${playerName(game.winner)} wins!`
-                : online && room.phase === "waiting"
-                  ? "Ready when you are."
-                  : turnLabel}
-            </h2>
-            {!game.winner && (
-              <>
-                <div
-                  className="push-action-meter"
-                  aria-label={`${game.used} of three actions used`}
-                >
-                  {[1, 2, 3].map((n) => (
-                    <span key={n} className={game.used >= n ? "used" : ""}>
-                      {game.used >= n ? "✓" : n}
-                    </span>
-                  ))}
-                </div>
-                <p className="push-turn-hint">
-                  {game.used === 0
-                    ? "Take one action or a combination of three."
-                    : game.used === 1
-                      ? "End your turn, or take two more actions."
-                      : "One more action. You can’t stop at two."}
-                </p>
-              </>
-            )}
-            {game.winner && (
+        </div>
+        <div className="push-play-tools">
+          <div className="push-main-tools">
+            <button
+              className="push-undo"
+              disabled={!canUndo || busy || rotating || blocked}
+              onClick={undo}
+              aria-label={online ? "Request undo" : "Undo action"}
+            >
+              ↶<span>Undo</span>
+            </button>
+            <div
+              className="push-action-meter"
+              aria-label={`${game.used} of three actions used`}
+            >
+              {[1, 2, 3].map((n) => (
+                <span key={n} className={game.used >= n ? "used" : ""}>
+                  {game.used >= n ? "✓" : n}
+                </span>
+              ))}
+            </div>
+            {game.winner ? (
               <button
                 className="primary"
-                disabled={busy || (online && room.rematch.includes(room.you))}
-                onClick={() =>
-                  online ? void send({ type: "rematch" }) : setSetup(true)
+                disabled={
+                  busy || blocked || (online && room.rematch.includes(room.you))
                 }
+                onClick={advance}
               >
                 {online && room.rematch.includes(room.you)
-                  ? "Waiting for rematch…"
-                  : "Play again →"}
+                  ? "Waiting…"
+                  : match.matchWinner
+                    ? "New series →"
+                    : "Next round →"}
               </button>
-            )}
-          </section>
-          {!game.winner && (
-            <section className="card push-controls">
-              <h3>
-                {chosen && canPlay
-                  ? `${titleCase(chosen.color)} · ${coordinate(chosen.x, chosen.y)}`
-                  : canPlay
-                    ? "Choose one of your pieces"
-                    : "Watch the board"}
-              </h3>
-              <p className="small muted">
-                {chosen && canPlay
-                  ? "Tap a curved arrow to rotate, or the highlighted square to move."
-                  : online && room.phase === "waiting"
-                    ? "The game starts when your friend joins."
-                    : canPlay
-                      ? "Tap a piece to show its rotation arrows and forward square."
-                      : "Your opponent’s moves appear here."}
-              </p>
-              {canPlay && chosen && !move?.legal && (
-                <p className="push-blocked">{move.reason}</p>
-              )}
+            ) : (
               <button
-                className="push-end"
+                className="primary push-end"
                 disabled={!canPlay || game.used !== 1}
                 onClick={() => takeAction("end")}
               >
-                End turn {game.used === 1 ? "→" : ""}
-              </button>
-              {!online && (
-                <button
-                  className="text-button push-undo"
-                  disabled={!undo.length}
-                  onClick={() => {
-                    setLocal(undo.at(-1));
-                    setUndo(undo.slice(0, -1));
-                    setError("");
-                  }}
-                >
-                  ↶ Undo action
-                </button>
-              )}
-            </section>
-          )}
-          {!online && (
-            <label className="push-board-setting">
-              <input
-                type="checkbox"
-                checked={rotateBoard}
-                onChange={(e) => {
-                  setRotateBoard(e.target.checked);
-                  setSelected(null);
-                }}
-              />
-              <span>
-                Rotate board after each turn
-                <small>Keep the active player’s side at the bottom.</small>
-              </span>
-            </label>
-          )}
-          {online && room.reset.length > 0 && (
-            <div className="card push-reset-offer">
-              <p>
-                {room.reset.includes(room.you)
-                  ? "Reset offered. Waiting for your friend."
-                  : "Your friend offered to reset this board."}
-              </p>
-              {!room.reset.includes(room.you) && (
-                <button disabled={busy} onClick={() => send({ type: "reset" })}>
-                  Agree to reset
-                </button>
-              )}
-            </div>
-          )}
-          <details className="push-history">
-            <summary>
-              Move history{" "}
-              <span>
-                {game.log.length === 90
-                  ? "last 90 actions"
-                  : `${game.log.length} actions`}
-              </span>
-            </summary>
-            <ol>
-              {game.log
-                .slice()
-                .reverse()
-                .map((entry, i) => (
-                  <li key={`${game.turn}:${i}`}>
-                    <span
-                      className={`push-history-dot ${entry.color}`}
-                      aria-label={entry.color}
-                    />
-                    <span>
-                      <small>Turn {entry.turn}</small>
-                      {describeAction(entry)}
-                    </span>
-                  </li>
-                ))}
-            </ol>
-            {!game.log.length && (
-              <p className="muted small">Your first move goes here.</p>
-            )}
-          </details>
-          <div className="push-game-links">
-            <button onClick={() => setRules(true)}>How to play</button>
-            {!game.winner && (!online || room.phase === "playing") && (
-              <button
-                disabled={busy || (online && room.reset.includes(room.you))}
-                onClick={() => setReset(true)}
-              >
-                {online ? "Offer reset" : "New game"}
+                End turn →
               </button>
             )}
           </div>
-        </aside>
-      </div>
+          <div className="push-secondary-tools">
+            {!online && (
+              <button
+                className="push-auto-rotate"
+                aria-pressed={rotateBoard}
+                onClick={() => {
+                  setRotateBoard(!rotateBoard);
+                  setSelected(null);
+                }}
+              >
+                ⟳ Auto-rotate
+              </button>
+            )}
+            <span>
+              {match.bestOf ? `Best of ${match.bestOf} · ` : ""}Round{" "}
+              {match.round}
+            </span>
+            {!game.winner && (
+              <button disabled={busy || blocked} onClick={() => setReset(true)}>
+                Reset
+              </button>
+            )}
+            {!online && (
+              <button
+                onClick={() => {
+                  setBestOf(local.bestOf);
+                  setSetup(true);
+                }}
+              >
+                New match
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+      {online && room.undoRequest && (
+        <div
+          className="push-request-banner"
+          role="alertdialog"
+          aria-label="Undo request"
+        >
+          {room.undoRequest.by === room.you ? (
+            <strong>Undo requested · waiting…</strong>
+          ) : (
+            <>
+              <strong>
+                {room.players[room.undoRequest.by].name} requests undo
+              </strong>
+              <button
+                disabled={busy}
+                onClick={() => send({ type: "undo-response", accept: false })}
+              >
+                Decline
+              </button>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => send({ type: "undo-response", accept: true })}
+              >
+                Allow undo
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {online && room.reset.length > 0 && (
+        <div className="push-request-banner" role="status">
+          {room.reset.includes(room.you) ? (
+            <strong>Reset offered · waiting…</strong>
+          ) : (
+            <>
+              <strong>Reset this round?</strong>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => send({ type: "reset" })}
+              >
+                Accept reset
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {errorMessage}
       {overlays}
     </main>
   );

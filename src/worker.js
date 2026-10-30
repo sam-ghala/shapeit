@@ -12,6 +12,7 @@ import {
   joinPushRoom,
   pushRoomView,
   applyPushAction,
+  upgradePushRoom,
 } from "./pushit/rooms.js";
 const json = (data, status = 200) =>
   Response.json(data, {
@@ -395,13 +396,7 @@ export class GameService {
           { error: "All rooms are busy. Please try again later." },
           503,
         );
-      const room = createPushRoom(
-        code,
-        body.profile,
-        body.hostColor,
-        body.starter,
-        now,
-      );
+      const room = createPushRoom(code, body.profile, now);
       this.sql.exec(
         "INSERT INTO pushit_rooms (code,data,expires) VALUES (?,?,?)",
         code,
@@ -429,6 +424,7 @@ export class GameService {
         404,
       );
     const room = JSON.parse(row.data);
+    upgradePushRoom(room);
     let token = bearer(request),
       index = room.players.findIndex((p) => p.token === token),
       joined = false;
