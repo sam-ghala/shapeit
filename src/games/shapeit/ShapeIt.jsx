@@ -34,6 +34,7 @@ export default function ShapeIt() {
   );
   const [screen, setScreen] = useState(initial.screen);
   const [profile, setProfile] = useProfile();
+  const needsMultiplayerName = screen === "duel" && !profile.name.trim();
   const [name, setName] = useState(profile.name),
     [profileOpen, setProfileOpen] = useState(initial.dialog === "profile");
   const [size, setSize] = useState(initial.size);
@@ -104,11 +105,10 @@ export default function ShapeIt() {
         onDaily={() => start("daily")}
       />
     );
-  if (screen === "duel")
+  if (screen === "duel" && !needsMultiplayerName)
     return (
       <DuelGame
         profile={profile}
-        onProfileChange={setProfile}
         mobile={mobilePlayer()}
         effects
         initialCode={/^\d{4}$/.test(initialCode) ? initialCode : ""}
@@ -192,7 +192,10 @@ export default function ShapeIt() {
         </button>
         <button
           className="arcade-mode duel-mode"
-          onClick={() => setScreen("duel")}
+          onClick={() => {
+            setName(profile.name);
+            setScreen("duel");
+          }}
         >
           <span className="mode-icon" aria-hidden="true">
             ⚔
@@ -210,8 +213,14 @@ export default function ShapeIt() {
         <InstallButton />
       </div>
       <footer className="menu-credit">Robin & Sam</footer>
-      {profileOpen && (
-        <Dialog title="Your name" onClose={() => setProfileOpen(false)}>
+      {(profileOpen || needsMultiplayerName) && (
+        <Dialog
+          title="Your name"
+          onClose={() => {
+            setProfileOpen(false);
+            if (needsMultiplayerName) home();
+          }}
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -234,7 +243,7 @@ export default function ShapeIt() {
               />
             </label>
             <button className="primary" type="submit">
-              Save name
+              {needsMultiplayerName ? "Continue" : "Save name"}
             </button>
           </form>
         </Dialog>

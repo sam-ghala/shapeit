@@ -5,7 +5,7 @@ This folder contains the original ShapeIt game, separated without changing its r
 - `ShapeIt.jsx`: menu, daily/training navigation and profile entry.
 - `game/`: deterministic geometry, puzzles, scores, persistence, placement and assistance.
 - `hooks/useGameSession.js`: solo lifecycle.
-- `components/`: board, game tools, guides, results and multiplayer UI.
+- `components/`: board, game tools, guides, results and multiplayer UI. Multiplayer inherits the shared profile name; unnamed players choose a name before the multiplayer view opens, including direct invite links and restored tabs. Name editing stays in the main menu.
 - `server/duel.js`: authoritative duel state and filtered views.
 - `server/api.js`: existing `/api/rooms` HTTP handler and server activity.
 - `shapeit.css`: ShapeIt-specific layouts.

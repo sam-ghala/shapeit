@@ -40,13 +40,11 @@ async function api(path, token, body, signal) {
 }
 export function DuelGame({
   profile,
-  onProfileChange,
   mobile,
   onHome,
   effects,
   initialCode = "",
 }) {
-  const [playerName, setPlayerName] = useState(profile.name);
   const [credentials, setCredentials] = useState(() => {
     const saved = readJSON("shapeit:room", null);
     return saved?.profileId === profile.id &&
@@ -103,19 +101,14 @@ export function DuelGame({
     };
   }, [credentials]);
   const enter = async (join) => {
-    if (!playerName.trim()) {
+    if (!profile.name.trim()) {
       setError("Choose your name first.");
       return;
     }
-    const nextProfile = {
-      ...profile,
-      name: playerName.trim().slice(0, 24),
-    };
-    onProfileChange(nextProfile);
     const data = await run(
       join ? `/api/rooms/${code}/join` : "/api/rooms",
       null,
-      { profile: nextProfile, mobile },
+      { profile, mobile },
     );
     if (data) {
       const value = {
@@ -196,19 +189,6 @@ export function DuelGame({
           {error}{" "}
           {credentials && <button onClick={reset}>Join another room</button>}
         </p>
-      )}
-      {!room && !credentials && (
-        <label className="card">
-          Your player name
-          <input
-            value={playerName}
-            placeholder="Select your name"
-            maxLength={24}
-            autoComplete="nickname"
-            onChange={(e) => setPlayerName(e.target.value)}
-            disabled={busy}
-          />
-        </label>
       )}
       {!room && !credentials && (
         <div className="duel-entry">
