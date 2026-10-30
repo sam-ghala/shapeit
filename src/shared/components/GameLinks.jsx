@@ -9,7 +9,22 @@ export function GameLinks({ current }) {
       {GAMES.filter((game) => game.id !== current && game.listed !== false).map(
         (game) => (
           <a key={game.id} href={gameHref(game.id)}>
-            <span aria-hidden="true">{game.icon}</span> {game.name}
+            {current !== "shapeit" && (
+              <span aria-hidden="true">{game.icon}</span>
+            )}
+            <span className="game-link-copy">
+              {current === "shapeit" && "Try "}
+              <span className="game-link-name">
+                {game.name.endsWith("It") ? (
+                  <>
+                    {game.name.slice(0, -2)}
+                    <span className="game-link-it">It</span>
+                  </>
+                ) : (
+                  game.name
+                )}
+              </span>
+            </span>
             {game.isNew && <span className="game-new-badge">New</span>}
             <span aria-hidden="true">↗</span>
           </a>

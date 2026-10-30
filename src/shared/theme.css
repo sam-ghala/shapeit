@@ -468,16 +468,37 @@ body,
   font-size: 13px;
   font-weight: 700;
 }
+.game-link-copy {
+  white-space: nowrap;
+}
+.game-link-name {
+  font-weight: 850;
+}
+.game-link-it {
+  color: #eb6250;
+}
 .game-new-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   border: 1px solid var(--ink);
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 1px 5px;
-  background: var(--coral);
+  background: var(--gold);
+  box-shadow: 0 2px 0 var(--ink);
+  transform: rotate(-7deg);
   color: var(--ink);
   font-size: 9px;
   font-weight: 900;
   line-height: 1.4;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+}
+
+.game-new-badge::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
 }
