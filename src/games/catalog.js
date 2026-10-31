@@ -28,6 +28,15 @@ export const GAMES = [
     sizes: ["classic"],
   },
   {
+    id: "blockit",
+    name: "BlockIt",
+    icon: "▥",
+    isNew: true,
+    status: "ready",
+    modes: ["local", "online"],
+    sizes: ["9x9"],
+  },
+  {
     id: "chessit",
     listed: false,
     name: "ChessIt",

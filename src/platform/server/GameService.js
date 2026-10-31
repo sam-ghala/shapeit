@@ -12,6 +12,10 @@ import {
   handleCaptureIt,
   expireCaptureItRooms,
 } from "../../games/captureit/server/api.js";
+import {
+  handleBlockIt,
+  expireBlockItRooms,
+} from "../../games/blockit/server/api.js";
 export class GameService {
   constructor(ctx) {
     this.sql = ctx.storage.sql;
@@ -30,6 +34,9 @@ export class GameService {
     );
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS captureit_rooms (code TEXT PRIMARY KEY, data TEXT NOT NULL, expires INTEGER NOT NULL)",
+    );
+    this.sql.exec(
+      "CREATE TABLE IF NOT EXISTS blockit_rooms (code TEXT PRIMARY KEY, data TEXT NOT NULL, expires INTEGER NOT NULL)",
     );
   }
   async fetch(request) {
@@ -64,6 +71,7 @@ export class GameService {
       "/api/rooms",
       "/api/pushit/rooms",
       "/api/captureit/rooms",
+      "/api/blockit/rooms",
     ].includes(url.pathname)
       ? "create"
       : url.pathname.endsWith("/join")
@@ -97,6 +105,7 @@ export class GameService {
     expireShapeItRooms(this, now);
     expirePushItRooms(this, now);
     expireCaptureItRooms(this, now);
+    expireBlockItRooms(this, now);
     this.sql.exec("DELETE FROM events WHERE at < ?", now - 30 * 86400000);
     if (url.pathname === "/api/events" && request.method === "POST") {
       const game = body.game || "shapeit";
@@ -104,6 +113,7 @@ export class GameService {
         !(game === "shapeit" && ["daily", "training"].includes(body.mode)) &&
         !(game === "pushit" && body.mode === "local") &&
         !(game === "captureit" && body.mode === "local") &&
+        !(game === "blockit" && body.mode === "local") &&
         !(
           game === "chessit" &&
           body.mode === "preview" &&
@@ -125,6 +135,8 @@ export class GameService {
       return handlePushIt(this, request, url, body, now);
     if (url.pathname.startsWith("/api/captureit/"))
       return handleCaptureIt(this, request, url, body, now);
+    if (url.pathname.startsWith("/api/blockit/"))
+      return handleBlockIt(this, request, url, body, now);
     return handleShapeIt(this, request, url, body, now);
   }
 }
