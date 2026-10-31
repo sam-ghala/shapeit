@@ -32,6 +32,8 @@ The rulebook was used as a rules reference; its text and artwork are not bundled
 
 `captureit:session:v1` holds a validated local session with up to 50 undo snapshots. `captureit:view` stores per-tab navigation; `captureit:sound` uses the shared audio helper. Refreshing or returning home preserves the game. Completed games cannot be undone. Starting another game explicitly replaces the saved game, recording an abort for an unfinished session.
 
+The latest movement stays visible as a faded green starting cell, a green destination highlight and a directional arrow until the next turn. The starting marker remains visible even if its tile was collected. Both local and online boards use the saved last action, so the trail survives refresh and follows undo; exchanges and resignations clear it.
+
 Shared activity uses `game: "captureit"`, `mode: "local"`, `size: "classic"`, with stable visit/start/finish/abort IDs. Completed games report the winner's color, turns and elapsed time; visits do not count as completed games. The profile remains in the shared profile store. No game boards or history are included in events.
 
 ## Online 1v1

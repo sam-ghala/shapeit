@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { TILES, CELLS, BOARD_BOUNDS } from "./engine.js";
+import { useId, useRef } from "react";
+import { TILES, CELLS, CELL_BY_ID, BOARD_BOUNDS } from "./engine.js";
 
 const points = (vertices) => vertices.map((point) => point.join(",")).join(" ");
 const inset = (cell, scale) =>
@@ -22,6 +22,11 @@ export function CaptureBoard({
   disabled = false,
 }) {
   const nodes = useRef(new Map());
+  const arrowId = useId();
+  const lastMove =
+    !preview && game.lastAction?.type === "move" ? game.lastAction : null;
+  const from = lastMove && CELL_BY_ID[lastMove.from];
+  const to = lastMove && CELL_BY_ID[lastMove.to];
   const tiles = new Set(game.tiles);
   const pieces = new Map(game.pieces.map((piece) => [piece.cell, piece]));
   const available = new Set(targets);
@@ -144,6 +149,38 @@ export function CaptureBoard({
             <polygon key={tile.id} points={points(tile.points)} />
           ))}
         </g>
+        {from && to && (
+          <g
+            className="capture-last-move"
+            role="img"
+            aria-label={`Last move: ${cap(lastMove.color)} moved from ${from.id} to ${to.id}.`}
+            data-from={from.id}
+            data-to={to.id}
+          >
+            <title>{`${cap(lastMove.color)}’s last move: faded start → destination`}</title>
+            <defs>
+              <marker
+                id={arrowId}
+                markerWidth="0.2"
+                markerHeight="0.2"
+                markerUnits="userSpaceOnUse"
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                orient="auto"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 Z" />
+              </marker>
+            </defs>
+            <polygon className="capture-last-from" points={inset(from, 0.9)} />
+            <polygon className="capture-last-to" points={inset(to, 0.9)} />
+            <path
+              className="capture-last-trail"
+              d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
+              markerEnd={`url(#${arrowId})`}
+            />
+          </g>
+        )}
       </svg>
     </div>
   );

@@ -191,11 +191,63 @@ test("undo restores a removed tile, its bank balance, and the moved piece", asyn
   assert.deepEqual(saved().game.tiles, ["0,0"]);
   assert.equal(saved().game.collected.white, 1);
   assert.equal(saved().game.current, "black");
+  assert.equal(
+    view.root.findAllByProps({ "data-cell-id": "0,-1:1" }).length,
+    0,
+  );
+  assert.equal(
+    view.root.findByProps({ className: "capture-last-move" }).props[
+      "data-from"
+    ],
+    "0,-1:1",
+  );
   await click(view, "Undo last turn");
+  assert.equal(
+    view.root.findAllByProps({ className: "capture-last-move" }).length,
+    0,
+  );
   assert.deepEqual(saved().game, initial.game);
   assert.equal(saved().history.length, 0);
   assert.equal(button(view, "Undo last turn").props.disabled, true);
   assert.equal(cell(view, "0,-1:1").props.role, "button");
+});
+
+test("the latest move stays marked through selection and reload, and undo restores the previous trail", async () => {
+  let view = mount();
+  const trail = () => view.root.findByProps({ className: "capture-last-move" });
+  const moveNext = async () => {
+    const game = saved().game;
+    const piece = game.pieces.find((p) => legalMoves(game, p.cell).length);
+    const to = legalMoves(game, piece.cell)[0];
+    await select(view, piece.cell);
+    await select(view, to);
+    return { from: piece.cell, to };
+  };
+  const first = await moveNext();
+  assert.equal(trail().props["data-from"], first.from);
+  assert.equal(trail().props["data-to"], first.to);
+  const second = await moveNext();
+  assert.equal(trail().props["data-from"], second.from);
+  assert.equal(trail().props["data-to"], second.to);
+  const piece = saved().game.pieces.find(
+    (p) => p.color === saved().game.current,
+  );
+  await select(view, piece.cell);
+  assert.equal(trail().props["data-to"], second.to);
+  await click(view, "Undo last turn");
+  assert.equal(trail().props["data-from"], first.from);
+  assert.equal(trail().props["data-to"], first.to);
+  unmount(view);
+  view = render();
+  assert.equal(trail().props["data-from"], first.from);
+  assert.equal(trail().props["data-to"], first.to);
+  await click(view, "Menu");
+  await click(view, "Resign");
+  await click(view, "Resign game");
+  assert.equal(
+    view.root.findAllByProps({ className: "capture-last-move" }).length,
+    0,
+  );
 });
 
 test("exchange can be cancelled without spending tiles, then targets only opponents", async () => {
