@@ -52,7 +52,7 @@ test("CaptureIt supports local and online play with a classic board", () => {
   const game = gameInfo("captureit");
   assert.equal(game.name, "CaptureIt");
   assert.equal(game.status, "ready");
-  assert.notEqual(game.listed, false);
+  assert.equal(game.listed, false);
   assert.deepEqual(game.modes, ["local", "online"]);
   assert.deepEqual(game.sizes, ["classic"]);
 });

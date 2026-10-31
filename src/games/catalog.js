@@ -20,6 +20,7 @@ export const GAMES = [
   },
   {
     id: "captureit",
+    listed: false,
     isNew: true,
     name: "CaptureIt",
     icon: "⬡",
@@ -29,6 +30,7 @@ export const GAMES = [
   },
   {
     id: "blockit",
+    listed: false,
     name: "BlockIt",
     icon: "▥",
     isNew: true,
