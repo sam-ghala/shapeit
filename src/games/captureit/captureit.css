@@ -379,16 +379,6 @@ body:has(.capture-home) {
   fill-opacity: 0.45;
   stroke-width: 0.065;
 }
-.capture-last-trail {
-  fill: none;
-  stroke: #398564;
-  stroke-width: 0.055;
-  stroke-linecap: round;
-  stroke-opacity: 0.8;
-}
-.capture-last-move marker path {
-  fill: #398564;
-}
 .capture-interactive:focus-visible .capture-cell-focus {
   stroke: #1763b2;
   stroke-dasharray: 0.08 0.035;

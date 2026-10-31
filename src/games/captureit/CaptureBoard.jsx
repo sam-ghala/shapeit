@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useRef } from "react";
 import { TILES, CELLS, CELL_BY_ID, BOARD_BOUNDS } from "./engine.js";
 
 const points = (vertices) => vertices.map((point) => point.join(",")).join(" ");
@@ -22,7 +22,6 @@ export function CaptureBoard({
   disabled = false,
 }) {
   const nodes = useRef(new Map());
-  const arrowId = useId();
   const lastMove =
     !preview && game.lastAction?.type === "move" ? game.lastAction : null;
   const from = lastMove && CELL_BY_ID[lastMove.from];
@@ -157,28 +156,9 @@ export function CaptureBoard({
             data-from={from.id}
             data-to={to.id}
           >
-            <title>{`${cap(lastMove.color)}’s last move: faded start → destination`}</title>
-            <defs>
-              <marker
-                id={arrowId}
-                markerWidth="0.2"
-                markerHeight="0.2"
-                markerUnits="userSpaceOnUse"
-                viewBox="0 0 10 10"
-                refX="8"
-                refY="5"
-                orient="auto"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 Z" />
-              </marker>
-            </defs>
+            <title>{`${cap(lastMove.color)}’s last move: highlighted start and destination`}</title>
             <polygon className="capture-last-from" points={inset(from, 0.9)} />
             <polygon className="capture-last-to" points={inset(to, 0.9)} />
-            <path
-              className="capture-last-trail"
-              d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
-              markerEnd={`url(#${arrowId})`}
-            />
           </g>
         )}
       </svg>
