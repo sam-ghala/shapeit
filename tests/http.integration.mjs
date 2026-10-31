@@ -68,7 +68,7 @@ assert.equal(playing.phase, "playing");
 const first = playing.turn;
 await action(1 - first, { type: "laser", side: "top", idx: 0 }, 400);
 const targetBoard = boardFromPlaced(boards[1 - first], 7, 5);
-let extraEntry;
+let absorbedEntry;
 for (const [side, count] of [
   ["top", 7],
   ["bottom", 7],
@@ -77,22 +77,23 @@ for (const [side, count] of [
 ]) {
   for (let idx = 0; idx < count; idx++) {
     const result = fireLaser(targetBoard, side, idx);
-    if (result.extraColors.length) {
-      extraEntry = { side, idx, result };
+    if (result.absorbed) {
+      absorbedEntry = { side, idx, result };
       break;
     }
   }
-  if (extraEntry) break;
+  if (absorbedEntry) break;
 }
-assert.ok(extraEntry);
+assert.ok(absorbedEntry);
 const shot = (
   await action(first, {
     type: "laser",
-    side: extraEntry.side,
-    idx: extraEntry.idx,
+    side: absorbedEntry.side,
+    idx: absorbedEntry.idx,
   })
 ).room.queries[0];
-assert.deepEqual(shot.extraColors, extraEntry.result.extraColors);
+assert.equal(shot.absorbed, true);
+assert.equal(shot.extraColors, undefined);
 assert.equal(shot.hits, undefined);
 assert.equal(shot.points, undefined);
 assert.equal(shot.path, undefined);

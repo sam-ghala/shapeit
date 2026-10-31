@@ -138,75 +138,44 @@ test("keeps the selected hit color, including when that color is already fully d
   );
 });
 
-test("public extra-piece clues select the matching tool and respect existing hit-color rules", () => {
+test("only absorption selects black; transparent metadata never changes color selection", () => {
   const empty = emptyBoard(7, 5),
     all = [...pieces, ...EXTRA_PIECES];
-  for (const color of ["transparent", "black"]) {
-    const clue = {
-      colors: [],
-      extraColors: [color],
-      absorbed: color === "black",
-    };
-    assert.equal(
-      nextPencilColor(laserPencilColors(clue), all, empty, {}, "red"),
-      color,
-    );
-  }
-  assert.deepEqual(laserPencilColors({ colors: [], absorbed: true }), [
+  const absorbed = {
+    colors: ["red"],
+    extraColors: ["transparent"],
+    absorbed: true,
+  };
+  assert.deepEqual(laserPencilColors(absorbed), ["black"]);
+  assert.equal(
+    nextPencilColor(laserPencilColors(absorbed), all, empty, {}, "red"),
     "black",
-  ]);
+  );
+  const diamond = { colors: [], extraColors: ["transparent"], absorbed: false };
+  assert.deepEqual(laserPencilColors(diamond), []);
+  assert.equal(
+    nextPencilColor(laserPencilColors(diamond), all, empty, {}, "red"),
+    "red",
+  );
+  const mixed = {
+    colors: ["red", "blue"],
+    extraColors: ["transparent"],
+    absorbed: false,
+  };
+  assert.deepEqual(laserPencilColors(mixed), ["red", "blue"]);
   assert.equal(
     nextPencilColor(
-      laserPencilColors({ colors: [], extraColors: [] }),
+      laserPencilColors(mixed),
       all,
       empty,
       {},
-      "red",
-    ),
-    "red",
-  );
-  const clue = { colors: ["red"], extraColors: ["transparent"] };
-  assert.equal(
-    nextPencilColor(
-      laserPencilColors(clue),
-      all,
-      empty,
-      {},
-      "blue",
+      "white",
       () => 0.99,
     ),
-    "transparent",
-  );
-  const diamond = EXTRA_PIECES.find((p) => p.color === "transparent");
-  const drawing = solutionDrawing(
-    [
-      {
-        ...diamond,
-        absCells: diamond.cells.map(([r, c, t]) => [r + 2, c + 3, t]),
-      },
-    ],
-    7,
-    5,
+    "blue",
   );
   assert.equal(
-    nextPencilColor(
-      laserPencilColors(clue),
-      all,
-      drawing.guess,
-      drawing.edges,
-      "blue",
-      () => 0.99,
-    ),
+    nextPencilColor(laserPencilColors(mixed), all, empty, {}, "red"),
     "red",
-  );
-  assert.equal(
-    nextPencilColor(
-      laserPencilColors(clue),
-      all,
-      drawing.guess,
-      drawing.edges,
-      "transparent",
-    ),
-    "transparent",
   );
 });

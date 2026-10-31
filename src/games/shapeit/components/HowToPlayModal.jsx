@@ -603,9 +603,7 @@ export function HowToPlayModal({ onClose, pieces }) {
         The color list tells you <em>which</em> colors were hit, but not their
         sequence or how often they were hit. Without extra pieces, no colors
         means a clear path. With extras enabled, a transparent diamond can
-        reflect the laser without adding a normal color. Extra hits show a ◇
-        marker or absorption and make the matching drawing color available
-        automatically.
+        reflect the laser without adding a color.
       </p>
 
       <h3 className="guide-section">{dot(c1, 12)} Draw your guess</h3>

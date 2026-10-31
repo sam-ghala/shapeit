@@ -1425,13 +1425,14 @@ test("phone laser targets leave a gap from all four border drawing targets and r
   }
 });
 
-test("solo extra hits select their pencil automatically and diamond feedback is visible", () => {
+test("solo absorption selects black while a colorless diamond gives no new clue or pencil change", () => {
   entries.clear();
-  const extrasConfig = { ...config, extras: true };
-  const session = { ...createSession(extrasConfig), seed: "extra-pencil-ui-0" },
+  const extrasConfig = { ...config, extras: true },
+    session = { ...createSession(extrasConfig), seed: "extra-pencil-ui-0" },
     pieces = buildPieces(session.seed, "compact", true),
     puzzle = generatePuzzle(session.seed, pieces, 7, 5);
-  const findShot = (color) => {
+  const diamondId = pieces.find((p) => p.color === "transparent").id;
+  const findShot = (absorbed) => {
     for (const [side, count] of [
       ["top", 7],
       ["bottom", 7],
@@ -1441,13 +1442,15 @@ test("solo extra hits select their pencil automatically and diamond feedback is 
       for (let idx = 0; idx < count; idx++) {
         const shot = fireLaser(puzzle.board, side, idx);
         if (
-          shot.extraColors.length === 1 &&
-          shot.extraColors[0] === color &&
-          shot.colors.length === 0
+          absorbed
+            ? shot.absorbed
+            : !shot.absorbed &&
+              !shot.colors.length &&
+              shot.hits.includes(diamondId)
         )
           return { side, idx };
       }
-    throw new Error(`No single-extra clue for ${color}`);
+    throw new Error("Missing test clue");
   };
   writeJSON(sessionKey("training", "compact", config.date), session);
   const rendered = mount(SoloGame, {
@@ -1456,33 +1459,33 @@ test("solo extra hits select their pencil automatically and diamond feedback is 
     effects: false,
     onHome() {},
   });
+  const board = () =>
+    rendered.root.findAll(
+      (n) => typeof n.type === "function" && n.type.name === "GameBoard",
+    )[0];
   try {
-    for (const color of ["transparent", "black"]) {
+    for (const absorbed of [false, true]) {
       act(() =>
         rendered.root
           .findByProps({ "aria-label": "red pencil" })
           .props.onClick(),
       );
-      const shot = findShot(color);
-      const board = () =>
-        rendered.root.findAll(
-          (n) => typeof n.type === "function" && n.type.name === "GameBoard",
-        )[0];
+      const shot = findShot(absorbed);
       act(() => board().props.onLaser(shot.side, shot.idx));
-      assert.equal(board().props.selectedColor, color);
-      if (color === "transparent")
-        assert.ok(
-          rendered.root.findByProps({
-            "aria-label": "Transparent diamond hit",
-          }),
-        );
+      assert.equal(board().props.selectedColor, absorbed ? "black" : "red");
+      assert.equal(
+        rendered.root.findAllByProps({
+          "aria-label": "Transparent diamond hit",
+        }).length,
+        0,
+      );
     }
   } finally {
     act(() => rendered.unmount());
   }
 });
 
-test("multiplayer extra clues select their pencil on new and repeated shots without spending another laser", async () => {
+test("multiplayer switches only absorbed shots to black, including repeated shots and old diamond metadata", async () => {
   entries.clear();
   const room = duelFixture("race");
   room.players.forEach((p) => p.pieces.push(...EXTRA_PIECES));
@@ -1509,7 +1512,7 @@ test("multiplayer extra clues select their pencil on new and repeated shots with
   const rendered = mount(DuelBoard, { ...props, action });
   try {
     for (const [idx, color] of [
-      [0, "transparent"],
+      [0, "red"],
       [1, "black"],
     ]) {
       act(() =>
@@ -1536,6 +1539,12 @@ test("multiplayer extra clues select their pencil on new and repeated shots with
       await act(async () => duelBoard(rendered).props.onLaser("top", idx));
       assert.equal(duelBoard(rendered).props.selectedColor, color);
       assert.equal(calls, idx + 1);
+      assert.equal(
+        rendered.root.findAllByProps({
+          "aria-label": "Transparent diamond hit",
+        }).length,
+        0,
+      );
     }
   } finally {
     act(() => rendered.unmount());

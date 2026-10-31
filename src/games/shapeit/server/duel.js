@@ -72,25 +72,8 @@ export function playerIndex(room, token) {
   return room.players.findIndex((p) => p.token === token);
 }
 export function advanceRoom(room, now = Date.now()) {
-  // Backfill the public extra-piece clues in rooms created before this update.
-  for (const q of room.queries) {
-    if (
-      q.extraColors !== undefined ||
-      !["top", "bottom", "left", "right"].includes(q.side) ||
-      !Number.isInteger(q.idx)
-    )
-      continue;
-    const target = room.settings.mode === "random" ? q.player : 1 - q.player;
-    const placed = room.players[target]?.placed;
-    if (placed?.length) {
-      const { cols, rows } = SIZES[room.size];
-      q.extraColors = fireLaser(
-        boardFromPlaced(placed, cols, rows),
-        q.side,
-        q.idx,
-      ).extraColors;
-    }
-  }
+  // Remove temporary extra-hit metadata from rooms created by the previous release.
+  for (const q of room.queries) delete q.extraColors;
   if (room.phase === "setup") room.deadline = null;
   if (room.phase === "setup" && room.players.every((p) => p.ready)) {
     room.phase = "playing";
@@ -418,7 +401,6 @@ export function applyAction(room, index, action, now = Date.now()) {
         exitSide: result.exitSide,
         exitIdx: result.exitIdx,
         colors: result.colors,
-        extraColors: result.extraColors,
         absorbed: result.absorbed,
       });
       room.lastActor = index;

@@ -64,12 +64,13 @@ test("transparent and black pieces report their special optical behavior", () =>
   b[1][1] = { color: "transparent", type: "/b", pieceId: "t" };
   const t = fireLaser(b, "top", 1);
   assert.deepEqual(t.colors, []);
-  assert.deepEqual(t.extraColors, ["transparent"]);
+  assert.equal(t.extraColors, undefined);
   assert.deepEqual(t.hits, ["t"]);
   assert.equal(t.exitSide, "left");
   b[1][0] = { color: "black", type: "/f", pieceId: "absorber" };
   const absorbedAfterDiamond = fireLaser(b, "top", 1);
-  assert.deepEqual(absorbedAfterDiamond.extraColors, ["black"]);
+  assert.equal(absorbedAfterDiamond.absorbed, true);
+  assert.equal(absorbedAfterDiamond.extraColors, undefined);
   assert.deepEqual(absorbedAfterDiamond.colors, []);
   b[1][0] = null;
   b[1][1] = { color: "black", type: "/f", pieceId: "b" };
@@ -77,7 +78,7 @@ test("transparent and black pieces report their special optical behavior", () =>
   assert.equal(k.absorbed, true);
   assert.equal(k.exitSide, null);
   assert.deepEqual(k.colors, []);
-  assert.deepEqual(k.extraColors, ["black"]);
+  assert.equal(k.extraColors, undefined);
   assert.deepEqual(k.points, [
     [1.5, 0],
     [1.5, 1],

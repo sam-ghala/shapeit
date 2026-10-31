@@ -1,14 +1,8 @@
 import { findMatch, getLabel } from "./engine.js";
 
-// Use public laser feedback only, including the two special-piece indicators.
+// An absorbed laser selects black; all other clues keep the normal color rules.
 export function laserPencilColors(shot) {
-  return [
-    ...new Set([
-      ...(shot.colors || []),
-      ...(shot.extraColors || []),
-      ...(shot.absorbed ? ["black"] : []),
-    ]),
-  ];
+  return shot.absorbed ? ["black"] : shot.colors || [];
 }
 
 // Inspect the player's drawing only: a complete shape counts even in the wrong place.

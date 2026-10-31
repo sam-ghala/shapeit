@@ -683,10 +683,12 @@ test("a guest leaving after the others accept a rematch releases the remaining p
   );
 });
 
-test("multiplayer publishes extra-piece tool colors without exposing positions or hidden hit IDs", () => {
+test("multiplayer retains absorption feedback but exposes no diamond-hit hint, including legacy rooms", () => {
   for (const color of ["transparent", "black"]) {
     const room = raceRoom(true),
-      board = boardFromPlaced(room.players[1].placed, 7, 5);
+      target = room.players[1],
+      board = boardFromPlaced(target.placed, 7, 5),
+      id = target.pieces.find((p) => p.color === color).id;
     let entry;
     for (const [side, count] of [
       ["top", 7],
@@ -694,29 +696,31 @@ test("multiplayer publishes extra-piece tool colors without exposing positions o
       ["left", 5],
       ["right", 5],
     ]) {
-      for (let idx = 0; idx < count; idx++)
-        if (fireLaser(board, side, idx).extraColors.includes(color)) {
+      for (let idx = 0; idx < count; idx++) {
+        const shot = fireLaser(board, side, idx);
+        if (
+          color === "black"
+            ? shot.absorbed
+            : shot.hits.includes(id) && !shot.absorbed
+        ) {
           entry = { side, idx };
           break;
         }
+      }
       if (entry) break;
     }
     assert.ok(entry);
     applyAction(room, 0, { type: "laser", ...entry }, 7000);
-    const view = roomView(room, 0, 7000),
-      clue = view.queries[0];
-    assert.ok(clue.extraColors.includes(color));
-    assert.ok(
-      clue.extraColors.every((c) => ["transparent", "black"].includes(c)),
-    );
+    const clue = roomView(room, 0, 7000).queries[0];
+    assert.equal(clue.absorbed, color === "black");
+    assert.equal(clue.extraColors, undefined);
     assert.equal(clue.hits, undefined);
-    assert.equal(clue.path, undefined);
     assert.equal(clue.points, undefined);
-    assert.equal(view.players[1].placed, undefined);
-    const expected = [...clue.extraColors];
-    delete room.queries[0].extraColors;
+    assert.equal(clue.path, undefined);
+    assert.equal(clue.colors.includes("transparent"), false);
+    room.queries[0].extraColors = ["transparent"];
     advanceRoom(room, 8000);
-    assert.deepEqual(roomView(room, 0, 8000).queries[0].extraColors, expected);
+    assert.equal(roomView(room, 0, 8000).queries[0].extraColors, undefined);
     assert.equal(room.queries.length, 1);
   }
 });

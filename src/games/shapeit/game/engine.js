@@ -206,7 +206,6 @@ export function fireLaser(board, side, idx) {
     path = [],
     hits = new Set(),
     colors = new Set(),
-    extraColors = new Set(),
     visited = new Set();
   while (r >= 0 && r < rows && c >= 0 && c < cols) {
     const key = `${r},${c},${dir}`;
@@ -215,7 +214,6 @@ export function fireLaser(board, side, idx) {
         exitSide: null,
         exitIdx: null,
         colors: [],
-        extraColors: [...extraColors].sort(),
         points,
         path,
         hits: [...hits],
@@ -237,14 +235,11 @@ export function fireLaser(board, side, idx) {
           }[dir]
         : [c + 0.5, r + 0.5];
       points.push(collision);
-      if (cell.color === "black" || cell.color === "transparent")
-        extraColors.add(cell.color);
       if (cell.color === "black")
         return {
           exitSide: null,
           exitIdx: null,
           colors: [],
-          extraColors: ["black"],
           points,
           path,
           hits: [...hits],
@@ -274,7 +269,6 @@ export function fireLaser(board, side, idx) {
     exitSide,
     exitIdx,
     colors: [...colors].sort(),
-    extraColors: [...extraColors].sort(),
     points,
     path,
     hits: [...hits],
