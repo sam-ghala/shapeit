@@ -19,6 +19,15 @@ export const GAMES = [
     sizes: ["4x4"],
   },
   {
+    id: "captureit",
+    isNew: true,
+    name: "CaptureIt",
+    icon: "⬡",
+    status: "ready",
+    modes: ["local", "online"],
+    sizes: ["classic"],
+  },
+  {
     id: "chessit",
     listed: false,
     name: "ChessIt",

@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { resolveGame, gameHref, gamePath } from "../src/platform/routing.js";
+import { GAMES, gameInfo } from "../src/games/catalog.js";
 import {
   recordEvent,
   activityView,
@@ -12,7 +13,7 @@ import {
 import { getProfile, saveProfile, PROFILE_KEY } from "../src/shared/profile.js";
 
 test("subdomains select independent games while existing paths and preview links keep working", () => {
-  for (const id of ["shapeit", "pushit", "chessit"]) {
+  for (const { id } of GAMES) {
     assert.equal(
       resolveGame({ hostname: `${id}.playshapeit.com`, pathname: "/" }),
       id,
@@ -40,10 +41,20 @@ test("subdomains select independent games while existing paths and preview links
     "https://playshapeit.com/",
   );
   assert.equal(gameHref("chessit", { hostname: "127.0.0.1" }), "/chessit");
+  assert.equal(gameHref("captureit", { hostname: "127.0.0.1" }), "/captureit");
   assert.equal(
     gameHref("pushit", { hostname: "playshapeit.com" }, false),
     "/pushit",
   );
+});
+
+test("CaptureIt supports local and online play with a classic board", () => {
+  const game = gameInfo("captureit");
+  assert.equal(game.name, "CaptureIt");
+  assert.equal(game.status, "ready");
+  assert.notEqual(game.listed, false);
+  assert.deepEqual(game.modes, ["local", "online"]);
+  assert.deepEqual(game.sizes, ["classic"]);
 });
 
 test("the public profile migrates and shares across game subdomains without sharing game storage", () => {
@@ -236,7 +247,7 @@ test("games and shared building blocks never import another game's implementatio
       )
     ).flat();
   }
-  for (const owner of ["shapeit", "pushit", "chessit", "shared"]) {
+  for (const owner of [...GAMES.map((game) => game.id), "shared"]) {
     const dir = owner === "shared" ? "src/shared" : `src/games/${owner}`;
     for (const file of await files(dir)) {
       if (!/\.(jsx?|css)$/.test(file)) continue;
@@ -245,9 +256,7 @@ test("games and shared building blocks never import another game's implementatio
         /(?:from\s*|import\s*)["'](\.[^"']+)["']/g,
       )) {
         const resolved = path.normalize(path.join(path.dirname(file), target));
-        const other = resolved.match(
-          /^src\/games\/(shapeit|pushit|chessit)\//,
-        )?.[1];
+        const other = resolved.match(/^src\/games\/([^/]+)\//)?.[1];
         assert.ok(!other || other === owner, `${file} imports ${resolved}`);
       }
     }
@@ -270,6 +279,7 @@ test("deleting a player removes every stored event across games and names but pr
       ["shapeit", "daily", "compact", "start"],
       ["shapeit", "daily", "compact", "finish"],
       ["pushit", "local", "4x4", "abort"],
+      ["captureit", "local", "classic", "finish"],
       ["chessit", "preview", "8x8", "visit"],
     ])
       recordEvent(
@@ -291,16 +301,16 @@ test("deleting a player removes every stored event across games and names but pr
     assert.throws(() => deletePlayerEvents(sql, invalid), /valid player/);
   assert.equal(
     [...sql.exec("SELECT COUNT(*) AS count FROM events")][0].count,
-    12,
+    15,
   );
   assert.deepEqual(deletePlayerEvents(sql, "delete-player"), {
     ok: true,
-    deleted: 8,
+    deleted: 10,
   });
   const remaining = [...sql.exec("SELECT data FROM events")].map((row) =>
     JSON.parse(row.data),
   );
-  assert.equal(remaining.length, 4);
+  assert.equal(remaining.length, 5);
   assert.ok(remaining.every((event) => event.profileId === "keep-player"));
   assert.deepEqual(deletePlayerEvents(sql, "delete-player"), {
     ok: true,

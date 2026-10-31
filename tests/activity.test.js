@@ -69,6 +69,90 @@ function shapeRoom(code = "2001", phase = "setup") {
   return room;
 }
 
+test("CaptureIt accepts deduplicated local activity, filters private fields and rejects unsupported modes", async () => {
+  const f = serviceFixture();
+  const post = (body) =>
+    f.service.fetch(
+      new Request("https://local.test/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  const common = {
+    game: "captureit",
+    profileId: "capture-player",
+    name: "Robin",
+    mode: "local",
+    size: "classic",
+  };
+  try {
+    for (const kind of ["visit", "start", "finish", "abort"]) {
+      const event = {
+        ...common,
+        id: `captureit:round:${kind}`,
+        sessionId: kind === "abort" ? "discarded-round" : "round",
+        kind,
+        ...(kind === "finish"
+          ? {
+              result: "completed",
+              winnerColor: "white",
+              turns: 27,
+              seconds: 350,
+              board: { private: true },
+              token: "private-token",
+            }
+          : {}),
+      };
+      for (let retry = 0; retry < 2; retry++) {
+        const response = await post(event);
+        assert.equal(
+          response.status,
+          200,
+          JSON.stringify(await response.json()),
+        );
+      }
+    }
+    assert.equal(f.events().length, 4);
+    const response = await f.service.fetch(
+      new Request(
+        "https://local.test/api/admin/events?game=captureit&player=capture-player",
+      ),
+    );
+    const activity = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(activity.events.length, 2);
+    assert.equal(activity.players[0].games, 2);
+    assert.equal(activity.players[0].finishes, 1);
+    assert.equal(activity.players[0].aborts, 1);
+    const finish = activity.events.find((event) => event.kind === "finish");
+    assert.equal(finish.winnerColor, "white");
+    assert.equal(finish.turns, 27);
+    assert.equal(finish.seconds, 350);
+    assert.equal(finish.result, "completed");
+    assert.ok(!JSON.stringify(activity).includes("private"));
+    for (const invalid of [
+      { mode: "online" },
+      { mode: "preview" },
+      { size: "4x4" },
+      { kind: "move" },
+      { game: "pushit", mode: "local", size: "4x4", kind: "visit" },
+      { game: "shapeit", mode: "daily", size: "compact", kind: "visit" },
+    ]) {
+      const response = await post({
+        ...common,
+        id: crypto.randomUUID(),
+        kind: "finish",
+        ...invalid,
+      });
+      assert.equal(response.status, 400, JSON.stringify(invalid));
+    }
+    assert.equal(f.events().length, 4);
+  } finally {
+    f.db.close();
+  }
+});
+
 test("PushIt reset and leave record each unfinished attempt once; finished games and lobbies are not aborted", async () => {
   const f = serviceFixture();
   try {

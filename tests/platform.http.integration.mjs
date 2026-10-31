@@ -21,8 +21,20 @@ async function request(path, body, expected = 200) {
   assert.equal(res.status, expected, JSON.stringify(data));
   return data;
 }
-for (const game of ["shapeit", "pushit", "chessit"]) {
-  for (const kind of game === "chessit" ? ["visit"] : ["start", "finish"]) {
+for (const path of ["/captureit", "/captureit/"]) {
+  const response = await fetch(base + path);
+  calls++;
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /id="root"/);
+}
+const games = [
+  ["shapeit", "daily", "compact", ["start", "finish"]],
+  ["pushit", "local", "4x4", ["start", "finish"]],
+  ["captureit", "local", "classic", ["visit", "start", "finish"]],
+  ["chessit", "preview", "8x8", ["visit"]],
+];
+for (const [game, mode, size, kinds] of games) {
+  for (const kind of kinds) {
     await request("/api/events", {
       id: `${id}:${game}:${kind}`,
       sessionId: id,
@@ -30,19 +42,26 @@ for (const game of ["shapeit", "pushit", "chessit"]) {
       name,
       ...(game === "shapeit" ? {} : { game }), // Preserve legacy client event support.
       kind,
-      mode:
-        game === "shapeit" ? "daily" : game === "pushit" ? "local" : "preview",
-      size: game === "shapeit" ? "compact" : game === "pushit" ? "4x4" : "8x8",
+      mode,
+      size,
       ...(kind === "finish"
         ? game === "shapeit"
           ? { result: "won", queries: 5, score: 5000 }
-          : {
-              result: "completed",
-              winnerColor: "black",
-              blackWins: 2,
-              whiteWins: 1,
-              turns: 9,
-            }
+          : game === "pushit"
+            ? {
+                result: "completed",
+                winnerColor: "black",
+                blackWins: 2,
+                whiteWins: 1,
+                turns: 9,
+              }
+            : {
+                result: "completed",
+                winnerColor: "white",
+                turns: 27,
+                seconds: 350,
+                board: { private: true },
+              }
         : {}),
     });
   }
@@ -50,12 +69,12 @@ for (const game of ["shapeit", "pushit", "chessit"]) {
 const all = await request(`/api/admin/events?player=${id}`);
 assert.deepEqual(
   new Set(all.events.map((e) => e.game)),
-  new Set(["shapeit", "pushit"]),
+  new Set(["shapeit", "pushit", "captureit"]),
 );
-assert.equal(all.events.length, 2);
+assert.equal(all.events.length, 3);
 assert.ok(all.events.every((e) => e.kind === "finish"));
-assert.equal(all.players.find((p) => p.profileId === id).games, 2);
-for (const game of ["shapeit", "pushit", "chessit"]) {
+assert.equal(all.players.find((p) => p.profileId === id).games, 3);
+for (const [game] of games) {
   const data = await request(`/api/admin/events?game=${game}&player=${id}`);
   assert.ok(data.events.every((e) => e.game === game && e.profileId === id));
   const player = data.players.find((p) => p.profileId === id);
@@ -63,6 +82,13 @@ for (const game of ["shapeit", "pushit", "chessit"]) {
   else {
     assert.equal(player.games, 1);
     assert.equal(player.finishes, 1);
+  }
+  if (game === "captureit") {
+    assert.equal(data.events.length, 1);
+    assert.equal(data.events[0].winnerColor, "white");
+    assert.equal(data.events[0].turns, 27);
+    assert.equal(data.events[0].seconds, 350);
+    assert.ok(!JSON.stringify(data).includes("private"));
   }
 }
 const push = await request("/api/admin/events?game=pushit");
@@ -91,17 +117,32 @@ await request(
   400,
 );
 await request("/api/admin/events?game=unknown", null, 400);
+for (const mode of ["online", "preview"]) {
+  await request(
+    "/api/events",
+    {
+      id: `${id}:captureit:${mode}`,
+      profileId: id,
+      name,
+      game: "captureit",
+      kind: "finish",
+      mode,
+      size: "classic",
+    },
+    400,
+  );
+}
 const beforeDelete = await request(`/api/admin/events?player=${id}`);
-assert.equal(beforeDelete.events.length, 2);
+assert.equal(beforeDelete.events.length, 3);
 const deleted = await request("/api/admin/events/delete-player", {
   profileId: id,
 });
-assert.equal(deleted.deleted, 5); // Hidden starts and the preview visit are removed as well.
+assert.equal(deleted.deleted, 8); // Hidden starts and visits are removed as well.
 const afterDelete = await request(`/api/admin/events?player=${id}`);
 assert.deepEqual(afterDelete.events, []);
 assert.ok(!afterDelete.players.some((p) => p.profileId === id));
 await request("/api/admin/events/delete-player", { profileId: "" }, 400);
 
 console.log(
-  `PASS: ${calls} shared-platform API requests; three games, legacy events, combined game/player filters, player totals, authoritative PushIt series and forged-online rejection.`,
+  `PASS: ${calls} shared-platform API requests; four registered games, local CaptureIt results, legacy events, combined game/player filters, player totals, authoritative PushIt series and unsupported-mode rejection.`,
 );

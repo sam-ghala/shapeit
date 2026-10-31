@@ -11,7 +11,9 @@ export function recordEvent(sql, input, now) {
     !["start", "finish", "abort", "visit"].includes(input.kind) ||
     !game.modes.includes(input.mode) ||
     !game.sizes.includes(input.size) ||
-    (input.kind === "visit" && game.status !== "coming-soon")
+    (input.kind === "visit" &&
+      game.status !== "coming-soon" &&
+      game.id !== "captureit")
   )
     throw new Error("Invalid activity event.");
   const event = {
@@ -34,7 +36,10 @@ export function recordEvent(sql, input, now) {
   };
   if (["won", "lost", "draw", "completed"].includes(input.result))
     event.result = input.result;
-  if (game.id === "pushit" && ["black", "white"].includes(input.winnerColor))
+  if (
+    ["pushit", "captureit"].includes(game.id) &&
+    ["black", "white"].includes(input.winnerColor)
+  )
     event.winnerColor = input.winnerColor;
   for (const key of [
     "queries",

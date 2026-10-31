@@ -5,6 +5,7 @@ const pages = {
   pushit: lazy(() =>
     import("../games/pushit/PushIt.jsx").then((m) => ({ default: m.PushIt })),
   ),
+  captureit: lazy(() => import("../games/captureit/CaptureIt.jsx")),
   chessit: lazy(() => import("../games/chessit/ChessIt.jsx")),
 };
 const Admin = lazy(() =>

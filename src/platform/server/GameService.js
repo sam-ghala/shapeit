@@ -8,6 +8,10 @@ import {
   handlePushIt,
   expirePushItRooms,
 } from "../../games/pushit/server/api.js";
+import {
+  handleCaptureIt,
+  expireCaptureItRooms,
+} from "../../games/captureit/server/api.js";
 export class GameService {
   constructor(ctx) {
     this.sql = ctx.storage.sql;
@@ -23,6 +27,9 @@ export class GameService {
     );
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS pushit_rooms (code TEXT PRIMARY KEY, data TEXT NOT NULL, expires INTEGER NOT NULL)",
+    );
+    this.sql.exec(
+      "CREATE TABLE IF NOT EXISTS captureit_rooms (code TEXT PRIMARY KEY, data TEXT NOT NULL, expires INTEGER NOT NULL)",
     );
   }
   async fetch(request) {
@@ -53,7 +60,11 @@ export class GameService {
   rateLimit(request, url, body) {
     const now = Date.now();
     this.sql.exec("DELETE FROM limits WHERE window < ?", now - 60000);
-    const category = ["/api/rooms", "/api/pushit/rooms"].includes(url.pathname)
+    const category = [
+      "/api/rooms",
+      "/api/pushit/rooms",
+      "/api/captureit/rooms",
+    ].includes(url.pathname)
       ? "create"
       : url.pathname.endsWith("/join")
         ? "join"
@@ -85,12 +96,14 @@ export class GameService {
     const now = Date.now();
     expireShapeItRooms(this, now);
     expirePushItRooms(this, now);
+    expireCaptureItRooms(this, now);
     this.sql.exec("DELETE FROM events WHERE at < ?", now - 30 * 86400000);
     if (url.pathname === "/api/events" && request.method === "POST") {
       const game = body.game || "shapeit";
       if (
         !(game === "shapeit" && ["daily", "training"].includes(body.mode)) &&
         !(game === "pushit" && body.mode === "local") &&
+        !(game === "captureit" && body.mode === "local") &&
         !(
           game === "chessit" &&
           body.mode === "preview" &&
@@ -110,6 +123,8 @@ export class GameService {
       return json(activityView(this.sql, url.searchParams));
     if (url.pathname.startsWith("/api/pushit/"))
       return handlePushIt(this, request, url, body, now);
+    if (url.pathname.startsWith("/api/captureit/"))
+      return handleCaptureIt(this, request, url, body, now);
     return handleShapeIt(this, request, url, body, now);
   }
 }
