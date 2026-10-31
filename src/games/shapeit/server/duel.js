@@ -11,6 +11,7 @@ import {
   fireLaser,
   checkSolution,
   scoreBreakdown,
+  SCORE_VERSION,
 } from "../game/engine.js";
 export const FINAL_MS = 60_000,
   RACE_COUNTDOWN_MS = 3_000,
@@ -71,6 +72,25 @@ export function playerIndex(room, token) {
   return room.players.findIndex((p) => p.token === token);
 }
 export function advanceRoom(room, now = Date.now()) {
+  // Backfill the public extra-piece clues in rooms created before this update.
+  for (const q of room.queries) {
+    if (
+      q.extraColors !== undefined ||
+      !["top", "bottom", "left", "right"].includes(q.side) ||
+      !Number.isInteger(q.idx)
+    )
+      continue;
+    const target = room.settings.mode === "random" ? q.player : 1 - q.player;
+    const placed = room.players[target]?.placed;
+    if (placed?.length) {
+      const { cols, rows } = SIZES[room.size];
+      q.extraColors = fireLaser(
+        boardFromPlaced(placed, cols, rows),
+        q.side,
+        q.idx,
+      ).extraColors;
+    }
+  }
   if (room.phase === "setup") room.deadline = null;
   if (room.phase === "setup" && room.players.every((p) => p.ready)) {
     room.phase = "playing";
@@ -82,6 +102,28 @@ export function advanceRoom(room, now = Date.now()) {
     room.deadline = null;
   }
   const race = ["race", "random"].includes(room.settings.mode);
+  // Finish an ongoing race under one scoring version, even if it spans a deployment.
+  if (["playing", "final"].includes(room.phase))
+    for (const p of room.players) {
+      const submission = p.submission;
+      if (
+        submission &&
+        submission.scoreVersion !== SCORE_VERSION &&
+        Number.isFinite(submission.seconds) &&
+        Number.isFinite(submission.queries)
+      ) {
+        const points = submission.correct
+          ? scoreBreakdown(
+              submission.seconds,
+              submission.queries,
+              room.settings.extras,
+            )
+          : { total: 0, bonus: 0 };
+        submission.score = points.total;
+        submission.bonus = points.bonus;
+        submission.scoreVersion = SCORE_VERSION;
+      }
+    }
   if (!race && room.phase === "final" && now >= room.deadline) {
     const { cols, rows } = SIZES[room.size];
     room.players.forEach((p, index) => {
@@ -185,6 +227,7 @@ function evaluateSubmission(room, index, drawing, now) {
     queries,
     score: points.total,
     bonus: points.bonus,
+    scoreVersion: SCORE_VERSION,
     at: now,
   };
 }
@@ -375,6 +418,7 @@ export function applyAction(room, index, action, now = Date.now()) {
         exitSide: result.exitSide,
         exitIdx: result.exitIdx,
         colors: result.colors,
+        extraColors: result.extraColors,
         absorbed: result.absorbed,
       });
       room.lastActor = index;

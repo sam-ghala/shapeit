@@ -8,7 +8,11 @@ import { writeJSON } from "../game/storage.js";
 import { unlockAudio, playSound } from "../../../shared/audio.js";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useGameSession } from "../hooks/useGameSession.js";
-import { nextPencilColor, trainingHint } from "../game/assistance.js";
+import {
+  nextPencilColor,
+  laserPencilColors,
+  trainingHint,
+} from "../game/assistance.js";
 import { dailyDate, fireLaser, scoreBreakdown } from "../game/engine.js";
 import { GameBoard } from "./GameBoard.jsx";
 import { ColorPicker, PieceList, QueryLog } from "./GameControls.jsx";
@@ -139,7 +143,13 @@ export function SoloGame({
       const result =
         existing < 0 ? fireLaser(puzzle.board, side, idx) : history[existing];
       setColor(
-        nextPencilColor(result.colors, pieces, game.guess, game.edges, color),
+        nextPencilColor(
+          laserPencilColors(result),
+          pieces,
+          game.guess,
+          game.edges,
+          color,
+        ),
       );
       if (existing < 0) state.fire(side, idx);
     }

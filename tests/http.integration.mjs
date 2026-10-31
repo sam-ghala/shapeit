@@ -4,6 +4,8 @@ import {
   generatePuzzle,
   emptyBoard,
   calcScore,
+  boardFromPlaced,
+  fireLaser,
 } from "../src/games/shapeit/game/engine.js";
 const base = process.env.TEST_BASE_URL || "http://127.0.0.1:8787";
 const adminKey = process.env.TEST_ADMIN_KEY || "local-test-only";
@@ -65,8 +67,33 @@ const playing = (await action(1, { type: "ready", placed: boards[1] })).room;
 assert.equal(playing.phase, "playing");
 const first = playing.turn;
 await action(1 - first, { type: "laser", side: "top", idx: 0 }, 400);
-const shot = (await action(first, { type: "laser", side: "top", idx: 0 })).room
-  .queries[0];
+const targetBoard = boardFromPlaced(boards[1 - first], 7, 5);
+let extraEntry;
+for (const [side, count] of [
+  ["top", 7],
+  ["bottom", 7],
+  ["left", 5],
+  ["right", 5],
+]) {
+  for (let idx = 0; idx < count; idx++) {
+    const result = fireLaser(targetBoard, side, idx);
+    if (result.extraColors.length) {
+      extraEntry = { side, idx, result };
+      break;
+    }
+  }
+  if (extraEntry) break;
+}
+assert.ok(extraEntry);
+const shot = (
+  await action(first, {
+    type: "laser",
+    side: extraEntry.side,
+    idx: extraEntry.idx,
+  })
+).room.queries[0];
+assert.deepEqual(shot.extraColors, extraEntry.result.extraColors);
+assert.equal(shot.hits, undefined);
 assert.equal(shot.points, undefined);
 assert.equal(shot.path, undefined);
 const final = (

@@ -5,7 +5,7 @@ import { ExtraOptions } from "./ExtraOptions.jsx";
 import { RaceResultDialog } from "./RaceResultDialog.jsx";
 import { ResultDialog } from "./ResultDialog.jsx";
 import { unlockAudio, playSound } from "../../../shared/audio.js";
-import { nextPencilColor } from "../game/assistance.js";
+import { nextPencilColor, laserPencilColors } from "../game/assistance.js";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   SIZES,
@@ -609,6 +609,15 @@ export function DuelBoard({
     }
     if (existing >= 0) {
       playSound("laser");
+      setColor(
+        nextPencilColor(
+          laserPencilColors(room.queries[existing]),
+          opponent.pieces,
+          drawing.guess,
+          drawing.edges,
+          color,
+        ),
+      );
       setSelectedQuery(existing);
       setSelectionVersion((v) => v + 1);
       return;
@@ -621,7 +630,7 @@ export function DuelBoard({
       playSound("laser");
       setColor(
         nextPencilColor(
-          shot.colors,
+          laserPencilColors(shot),
           opponent.pieces,
           drawing.guess,
           drawing.edges,

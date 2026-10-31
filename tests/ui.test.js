@@ -16,6 +16,8 @@ import {
   generatePuzzle,
   solutionDrawing,
   emptyBoard,
+  fireLaser,
+  EXTRA_PIECES,
 } from "../src/games/shapeit/game/engine.js";
 const require = createRequire(import.meta.url);
 async function component(path, name) {
@@ -393,7 +395,7 @@ test("phone menu has no board-size choice and training opens without an extras d
     const board = view.root
       .findAllByType("svg")
       .find((n) => n.props.className === "game-board");
-    assert.equal(board.props.viewBox, "0 0 400 304");
+    assert.equal(board.props.viewBox, "0 0 432 336");
   } finally {
     act(() => view.unmount());
     navigator.userAgent = oldAgent;
@@ -1366,5 +1368,176 @@ test("admin hides cached starts and confirms player-wide deletion, including err
   } finally {
     act(() => view.unmount());
     globalThis.fetch = previousFetch;
+  }
+});
+
+test("phone laser targets leave a gap from all four border drawing targets and replay stays aligned", () => {
+  const oldAgent = navigator.userAgent;
+  navigator.userAgent = "Android";
+  const replay = {
+    points: [
+      [0.5, 0],
+      [0.5, 5],
+    ],
+  };
+  const rendered = mount(GameBoard, {
+    cols: 7,
+    rows: 5,
+    guess: emptyBoard(7, 5),
+    onCell() {},
+    onEdge() {},
+    onLaser() {},
+    activeLaser: replay,
+  });
+  try {
+    const svg = rendered.root.findByType("svg"),
+      board = rendered.root.findByProps({ className: "board-surface" });
+    const labels = rendered.root.findAllByProps({ className: "laser-label" });
+    const rect = (index) => labels[index].findByType("rect").props;
+    const Z = board.props.width / 7;
+    const top = rect(0),
+      bottom = rect(7),
+      left = rect(14),
+      right = rect(19);
+    assert.ok(board.props.y - 6 - (top.y + top.height) >= 10);
+    assert.ok(bottom.y - (board.props.y + board.props.height + 6) >= 10);
+    assert.ok(board.props.x - 6 - (left.x + left.width) >= 10);
+    assert.ok(right.x - (board.props.x + board.props.width + 6) >= 10);
+    assert.equal(Z, 48);
+    assert.equal(svg.props.viewBox, "0 0 432 336");
+    assert.equal(
+      rendered.root.findByType("polyline").props.points,
+      "72,48 72,288",
+    );
+  } finally {
+    act(() => rendered.unmount());
+    navigator.userAgent = oldAgent;
+  }
+  const desktop = mount(GameBoard, {
+    cols: 7,
+    rows: 5,
+    guess: emptyBoard(7, 5),
+  });
+  try {
+    assert.equal(desktop.root.findByType("svg").props.viewBox, "0 0 400 304");
+  } finally {
+    act(() => desktop.unmount());
+  }
+});
+
+test("solo extra hits select their pencil automatically and diamond feedback is visible", () => {
+  entries.clear();
+  const extrasConfig = { ...config, extras: true };
+  const session = { ...createSession(extrasConfig), seed: "extra-pencil-ui-0" },
+    pieces = buildPieces(session.seed, "compact", true),
+    puzzle = generatePuzzle(session.seed, pieces, 7, 5);
+  const findShot = (color) => {
+    for (const [side, count] of [
+      ["top", 7],
+      ["bottom", 7],
+      ["left", 5],
+      ["right", 5],
+    ])
+      for (let idx = 0; idx < count; idx++) {
+        const shot = fireLaser(puzzle.board, side, idx);
+        if (
+          shot.extraColors.length === 1 &&
+          shot.extraColors[0] === color &&
+          shot.colors.length === 0
+        )
+          return { side, idx };
+      }
+    throw new Error(`No single-extra clue for ${color}`);
+  };
+  writeJSON(sessionKey("training", "compact", config.date), session);
+  const rendered = mount(SoloGame, {
+    config: extrasConfig,
+    profile: { id: "extra-test-player", name: "Test" },
+    effects: false,
+    onHome() {},
+  });
+  try {
+    for (const color of ["transparent", "black"]) {
+      act(() =>
+        rendered.root
+          .findByProps({ "aria-label": "red pencil" })
+          .props.onClick(),
+      );
+      const shot = findShot(color);
+      const board = () =>
+        rendered.root.findAll(
+          (n) => typeof n.type === "function" && n.type.name === "GameBoard",
+        )[0];
+      act(() => board().props.onLaser(shot.side, shot.idx));
+      assert.equal(board().props.selectedColor, color);
+      if (color === "transparent")
+        assert.ok(
+          rendered.root.findByProps({
+            "aria-label": "Transparent diamond hit",
+          }),
+        );
+    }
+  } finally {
+    act(() => rendered.unmount());
+  }
+});
+
+test("multiplayer extra clues select their pencil on new and repeated shots without spending another laser", async () => {
+  entries.clear();
+  const room = duelFixture("race");
+  room.players.forEach((p) => p.pieces.push(...EXTRA_PIECES));
+  const props = duelProps(room);
+  let queries = [],
+    calls = 0;
+  const action = async ({ side, idx }) => {
+    calls++;
+    queries = [
+      ...queries,
+      {
+        player: 0,
+        side,
+        idx,
+        exitSide: idx === 0 ? "left" : null,
+        exitIdx: idx === 0 ? 0 : null,
+        colors: [],
+        extraColors: [idx === 0 ? "transparent" : "black"],
+        absorbed: idx === 1,
+      },
+    ];
+    return { room: { ...props.room, queries } };
+  };
+  const rendered = mount(DuelBoard, { ...props, action });
+  try {
+    for (const [idx, color] of [
+      [0, "transparent"],
+      [1, "black"],
+    ]) {
+      act(() =>
+        rendered.root
+          .findByProps({ "aria-label": "red pencil" })
+          .props.onClick(),
+      );
+      await act(async () => duelBoard(rendered).props.onLaser("top", idx));
+      assert.equal(duelBoard(rendered).props.selectedColor, color);
+      act(() =>
+        rendered.update(
+          React.createElement(DuelBoard, {
+            ...props,
+            room: { ...props.room, queries },
+            action,
+          }),
+        ),
+      );
+      act(() =>
+        rendered.root
+          .findByProps({ "aria-label": "red pencil" })
+          .props.onClick(),
+      );
+      await act(async () => duelBoard(rendered).props.onLaser("top", idx));
+      assert.equal(duelBoard(rendered).props.selectedColor, color);
+      assert.equal(calls, idx + 1);
+    }
+  } finally {
+    act(() => rendered.unmount());
   }
 });

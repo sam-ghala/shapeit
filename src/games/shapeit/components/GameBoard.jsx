@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from "react";
+import { mobilePlayer } from "../../../shared/device.js";
 import { PCOLORS, PFILL } from "../constants/gameConstants.js";
 import {
   computeOutlineEdges,
@@ -9,8 +10,7 @@ import {
 } from "../game/engine.js";
 import { fillPoints, diagLine } from "../utils/gameUtils.js";
 
-const Z = 48,
-  M = 32;
+const Z = 48;
 export function GameBoard({
   cols,
   rows,
@@ -38,6 +38,17 @@ export function GameBoard({
   previewPlacement = null,
   replayVersion = 0,
 }) {
+  const [touchLayout, setTouchLayout] = useState(
+    () => mobilePlayer() || window.matchMedia("(pointer: coarse)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(pointer: coarse)");
+    const update = () => setTouchLayout(mobilePlayer() || media.matches);
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+  const M = touchLayout ? 48 : 32;
+  const labelInset = 16;
   const [focus, setFocus] = useState([0, 0]);
   const [hover, setHover] = useState(null);
   const hoverCell = hover ? guess[hover[0]]?.[hover[1]] : null;
@@ -275,6 +286,7 @@ export function GameBoard({
         <LaserReplay
           key={`${replayVersion}:${JSON.stringify(activeLaser.points)}`}
           points={activeLaser.points}
+          margin={M}
           animate={animate}
         />
       )}
@@ -349,12 +361,12 @@ export function GameBoard({
             const x = horizontal
               ? M + i * Z + Z / 2
               : side === "left"
-                ? M / 2
-                : M + cols * Z + M / 2;
+                ? labelInset
+                : 2 * M + cols * Z - labelInset;
             const y = horizontal
               ? side === "top"
-                ? M / 2
-                : M + rows * Z + M / 2
+                ? labelInset
+                : 2 * M + rows * Z - labelInset
               : M + i * Z + Z / 2;
             const used = queries.some(
               (q) =>
@@ -417,7 +429,7 @@ export function GameBoard({
   );
 }
 
-function LaserReplay({ points, animate }) {
+function LaserReplay({ points, animate, margin = 32 }) {
   const [complete, setComplete] = useState(false);
   useEffect(() => {
     // Background Safari windows can pause CSS animations. Still leave the
@@ -437,7 +449,9 @@ function LaserReplay({ points, animate }) {
       className={
         animate && !complete ? "laser-path animate-laser" : "laser-path"
       }
-      points={points.map(([x, y]) => `${M + x * Z},${M + y * Z}`).join(" ")}
+      points={points
+        .map(([x, y]) => `${margin + x * Z},${margin + y * Z}`)
+        .join(" ")}
       style={{ "--laser-length": Math.max(1, length) }}
       onAnimationEnd={() => setComplete(true)}
       fill="none"

@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   nextPencilColor,
+  laserPencilColors,
   trainingHint,
 } from "../src/games/shapeit/game/assistance.js";
 import {
   emptyBoard,
+  EXTRA_PIECES,
   solutionDrawing,
 } from "../src/games/shapeit/game/engine.js";
 const pieces = [
@@ -133,5 +135,78 @@ test("keeps the selected hit color, including when that color is already fully d
       () => 0.99,
     ),
     "red",
+  );
+});
+
+test("public extra-piece clues select the matching tool and respect existing hit-color rules", () => {
+  const empty = emptyBoard(7, 5),
+    all = [...pieces, ...EXTRA_PIECES];
+  for (const color of ["transparent", "black"]) {
+    const clue = {
+      colors: [],
+      extraColors: [color],
+      absorbed: color === "black",
+    };
+    assert.equal(
+      nextPencilColor(laserPencilColors(clue), all, empty, {}, "red"),
+      color,
+    );
+  }
+  assert.deepEqual(laserPencilColors({ colors: [], absorbed: true }), [
+    "black",
+  ]);
+  assert.equal(
+    nextPencilColor(
+      laserPencilColors({ colors: [], extraColors: [] }),
+      all,
+      empty,
+      {},
+      "red",
+    ),
+    "red",
+  );
+  const clue = { colors: ["red"], extraColors: ["transparent"] };
+  assert.equal(
+    nextPencilColor(
+      laserPencilColors(clue),
+      all,
+      empty,
+      {},
+      "blue",
+      () => 0.99,
+    ),
+    "transparent",
+  );
+  const diamond = EXTRA_PIECES.find((p) => p.color === "transparent");
+  const drawing = solutionDrawing(
+    [
+      {
+        ...diamond,
+        absCells: diamond.cells.map(([r, c, t]) => [r + 2, c + 3, t]),
+      },
+    ],
+    7,
+    5,
+  );
+  assert.equal(
+    nextPencilColor(
+      laserPencilColors(clue),
+      all,
+      drawing.guess,
+      drawing.edges,
+      "blue",
+      () => 0.99,
+    ),
+    "red",
+  );
+  assert.equal(
+    nextPencilColor(
+      laserPencilColors(clue),
+      all,
+      drawing.guess,
+      drawing.edges,
+      "transparent",
+    ),
+    "transparent",
   );
 });

@@ -1925,3 +1925,15 @@ html {
     font-size: 12px;
   }
 }
+
+/* Completed dailys stay playable, with a quiet neutral menu treatment. */
+.arcade-menu .daily-mode.complete,
+.arcade-menu .daily-mode.complete:hover:not(:disabled) {
+  background: #e4e7e2;
+  color: #536052;
+}
+.query-log .shapeit-extra-hit {
+  color: #4d647b;
+  font-size: 20px;
+  line-height: 1;
+}

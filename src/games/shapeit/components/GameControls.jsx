@@ -112,6 +112,16 @@ export function QueryLog({
                   </span>
                 </strong>
                 <span className="query-colors">
+                  {h.extraColors?.includes("transparent") && (
+                    <span
+                      className="shapeit-extra-hit"
+                      title="Transparent diamond hit"
+                      aria-label="Transparent diamond hit"
+                    >
+                      ◇
+                    </span>
+                  )}
+
                   {h.absorbed
                     ? "No signal"
                     : h.colors.length === 0

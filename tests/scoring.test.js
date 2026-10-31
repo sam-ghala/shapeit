@@ -21,19 +21,19 @@ test("scoring preserves early clues and time curve, with a smooth penalty beyond
 test("extras give a bounded bonus without making 9000 easy", () => {
   assert.deepEqual(scoreBreakdown(120, 10, { diamond: true }), {
     base: 4000,
-    bonus: 288,
-    total: 4288,
+    bonus: 480,
+    total: 4480,
   });
-  assert.equal(calcScore(120, 10, { black: true }), 4288);
+  assert.equal(calcScore(120, 10, { black: true }), 4480);
   assert.deepEqual(scoreBreakdown(120, 10, true), {
     base: 4000,
-    bonus: 576,
-    total: 4576,
+    bonus: 960,
+    total: 4960,
   });
-  assert.equal(scoreBreakdown(120, 5, true).bonus, 600);
+  assert.equal(scoreBreakdown(120, 5, true).bonus, 1000);
   assert.equal(scoreBreakdown(0, 0, true).bonus, 0);
   assert.ok(calcScore(13, 5) > 9000);
   assert.ok(calcScore(14, 5) < 9000);
-  assert.ok(calcScore(17, 5, true) > 9000);
-  assert.ok(calcScore(18, 5, true) < 9000);
+  assert.ok(calcScore(21, 5, true) > 9000);
+  assert.ok(calcScore(22, 5, true) < 9000);
 });

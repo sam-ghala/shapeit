@@ -16,6 +16,8 @@ import {
   emptyBoard,
   generatePuzzle,
   buildPieces,
+  boardFromPlaced,
+  fireLaser,
 } from "../src/games/shapeit/game/engine.js";
 const profiles = [
   { id: "player-one", name: "Robin" },
@@ -679,4 +681,55 @@ test("a guest leaving after the others accept a rematch releases the remaining p
     r.players.map((p) => p.id),
     [profiles[0].id, "group-player-1"],
   );
+});
+
+test("multiplayer publishes extra-piece tool colors without exposing positions or hidden hit IDs", () => {
+  for (const color of ["transparent", "black"]) {
+    const room = raceRoom(true),
+      board = boardFromPlaced(room.players[1].placed, 7, 5);
+    let entry;
+    for (const [side, count] of [
+      ["top", 7],
+      ["bottom", 7],
+      ["left", 5],
+      ["right", 5],
+    ]) {
+      for (let idx = 0; idx < count; idx++)
+        if (fireLaser(board, side, idx).extraColors.includes(color)) {
+          entry = { side, idx };
+          break;
+        }
+      if (entry) break;
+    }
+    assert.ok(entry);
+    applyAction(room, 0, { type: "laser", ...entry }, 7000);
+    const view = roomView(room, 0, 7000),
+      clue = view.queries[0];
+    assert.ok(clue.extraColors.includes(color));
+    assert.ok(
+      clue.extraColors.every((c) => ["transparent", "black"].includes(c)),
+    );
+    assert.equal(clue.hits, undefined);
+    assert.equal(clue.path, undefined);
+    assert.equal(clue.points, undefined);
+    assert.equal(view.players[1].placed, undefined);
+    const expected = [...clue.extraColors];
+    delete room.queries[0].extraColors;
+    advanceRoom(room, 8000);
+    assert.deepEqual(roomView(room, 0, 8000).queries[0].extraColors, expected);
+    assert.equal(room.queries.length, 1);
+  }
+});
+
+test("an active race spanning the bonus update uses the same scoring version for both submissions", () => {
+  const room = raceRoom(true);
+  applyAction(room, 0, { type: "submit", drawing: correct(room, 0) }, 126000);
+  room.players[0].submission.score = 5600;
+  room.players[0].submission.bonus = 600;
+  room.players[0].submission.scoreVersion = 2;
+  applyAction(room, 1, { type: "submit", drawing: correct(room, 1) }, 126000);
+  assert.equal(room.players[0].submission.score, 6000);
+  assert.equal(room.players[1].submission.score, 6000);
+  assert.equal(room.players[0].submission.scoreVersion, 3);
+  assert.equal(room.winner, "draw");
 });

@@ -58,7 +58,7 @@ Validation: `npm test` includes engine, match, approval, series and UI checks. `
 
 A correct board scores time × laser efficiency, rounded to an integer; a wrong board scores zero. Time is `200 / (seconds / 60 + 2)`. Laser efficiency is 100 for 0–5 shots, `120 - 4 × shots` for 6–10, then `80 × exp(-0.05 × (shots - 10))`. This preserves the original early scoring and time curve while removing the sharp penalty after ten shots.
 
-Each enabled extra adds `0.12 × raw score × (1 - raw score / 10000)`, rounded once for the combined bonus. This gives at most 300 points per extra and tapers near 10,000. With at most five lasers, 9,000 requires less than 14 seconds without extras or less than 18 seconds with both. Existing personal results are recalculated from their stored duration, shots and extras so old and new records remain comparable; puzzle generation is unchanged.
+Each enabled extra adds `0.20 × raw score × (1 - raw score / 10000)`, rounded once for the combined bonus. This gives at most 500 points per extra and tapers near 10,000. With at most five lasers, 9,000 requires less than 14 seconds without extras or less than 22 seconds with both. Existing personal results are recalculated from their stored duration, shots and extras so old and new records remain comparable; puzzle generation is unchanged.
 
 ## Private duels
 

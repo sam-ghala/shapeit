@@ -54,7 +54,7 @@ test("personal scores survive reload, deduplicate results and separate modes and
     ...createSession(config),
     status: "won",
     score: 4300,
-    scoreVersion: 2,
+    scoreVersion: 3,
     startedAt: 1000,
     finishedAt: 121000,
   };
@@ -171,13 +171,13 @@ test("previous results migrate to the same scoring rules without duplicates or l
     },
   ]);
   const migrated = readScores()[0];
-  assert.equal(migrated.score, 3630);
-  assert.equal(migrated.scoreVersion, 2);
+  assert.equal(migrated.score, 3973);
+  assert.equal(migrated.scoreVersion, 3);
   assert.equal(migrated.id, game.id);
   saveResult(game);
   assert.equal(readScores().length, 1);
   writeJSON(sessionKey("training", "compact", config.date), game);
   const restored = loadSession({ ...config, mode: "training", extras: true });
   assert.equal(restored.score, migrated.score);
-  assert.equal(restored.scoreVersion, 2);
+  assert.equal(restored.scoreVersion, 3);
 });

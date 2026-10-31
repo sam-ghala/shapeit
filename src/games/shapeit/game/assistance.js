@@ -1,5 +1,16 @@
 import { findMatch, getLabel } from "./engine.js";
 
+// Use public laser feedback only, including the two special-piece indicators.
+export function laserPencilColors(shot) {
+  return [
+    ...new Set([
+      ...(shot.colors || []),
+      ...(shot.extraColors || []),
+      ...(shot.absorbed ? ["black"] : []),
+    ]),
+  ];
+}
+
 // Inspect the player's drawing only: a complete shape counts even in the wrong place.
 export function nextPencilColor(
   colors,
