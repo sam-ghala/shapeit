@@ -9,11 +9,27 @@
 }
 .capture-home {
   max-width: 540px;
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 22px;
+  gap: clamp(8px, 2dvh, 22px);
+}
+body:has(.capture-home),
+body:has(.capture-playing) {
+  overflow: hidden;
+}
+.capture-home > * {
+  flex-shrink: 0;
+}
+.capture-playing {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.capture-playing > :not(.capture-play-layout) {
+  flex-shrink: 0;
 }
 body:has(.capture-home) {
   background-color: var(--canvas);
@@ -63,11 +79,6 @@ body:has(.capture-home) {
   color: var(--muted);
   font-weight: 600;
 }
-.capture-preview {
-  width: 172px;
-  align-self: center;
-  transform: rotate(-7deg);
-}
 .capture-home-modes {
   display: grid;
   gap: 16px;
@@ -111,13 +122,18 @@ body:has(.capture-home) {
   font-size: 21px;
 }
 .capture-play-layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 270px;
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
 .capture-arena {
   min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 .capture-scoreboard {
   display: grid;
@@ -258,6 +274,7 @@ body:has(.capture-home) {
 }
 .capture-board-scroll {
   width: 100%;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   border-radius: 12px;
@@ -265,16 +282,14 @@ body:has(.capture-home) {
 .capture-board {
   display: block;
   width: 100%;
-  max-height: min(64dvh, 640px);
+  height: 100%;
+  max-height: 100%;
   overflow: visible;
   padding: 5px;
 }
-.capture-preview .capture-board {
-  max-height: none;
-  padding: 0;
-}
 .capture-zoomed .capture-board {
   min-width: 660px;
+  height: auto;
   max-height: none;
 }
 .capture-field {
@@ -371,6 +386,7 @@ body:has(.capture-home) {
 .capture-sidebar {
   padding-top: 2px;
   display: grid;
+  align-content: start;
   gap: 22px;
 }
 .capture-actions {
@@ -418,6 +434,10 @@ body:has(.capture-home) {
 }
 .capture-menu .game-links {
   margin-top: 22px;
+}
+.capture-menu-details {
+  margin-top: 20px;
+  font-size: 13px;
 }
 .capture-rules {
   max-width: min(520px, calc(100vw - 24px));
@@ -479,7 +499,8 @@ body:has(.capture-home) {
   }
   .capture-play-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 10px;
   }
   .capture-playing {
     max-width: 620px;
@@ -488,13 +509,13 @@ body:has(.capture-home) {
     margin-bottom: 12px;
   }
   .capture-sidebar {
-    gap: 16px;
+    gap: 8px;
   }
   .capture-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    padding: 16px;
+    gap: 6px 10px;
+    padding: 10px;
   }
   .capture-actions h2,
   .capture-actions p {
@@ -513,16 +534,10 @@ body:has(.capture-home) {
     grid-column: 1 / -1;
   }
   .capture-last-turn {
-    padding: 0;
+    display: none;
   }
   .capture-save-note {
-    padding: 0;
-  }
-  .capture-board {
-    max-height: 60dvh;
-  }
-  .capture-zoomed .capture-board {
-    max-height: none;
+    display: none;
   }
 }
 @media (max-width: 390px) {
@@ -537,20 +552,26 @@ body:has(.capture-home) {
     white-space: nowrap;
   }
   .capture-wordmark {
-    font-size: 26px;
+    font-size: 24px;
+  }
+  .capture-topbar {
+    gap: 8px;
   }
   .capture-topbar > div {
     gap: 3px;
   }
   .capture-topbar > div > button {
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 13px;
   }
   .capture-topbar .capture-help {
     padding: 0;
+    font-size: 21px;
   }
   .capture-topbar .sound-icon {
-    display: none;
+    width: 44px;
+    padding: 0;
   }
   .capture-player {
     padding: 9px 10px;
@@ -567,9 +588,165 @@ body:has(.capture-home) {
 }
 @media (max-height: 760px) {
   .capture-home {
+    gap: 10px;
+  }
+  .capture-home-modes {
+    gap: 10px;
+  }
+  .capture-home-modes .arcade-mode {
+    min-height: 64px;
+    padding: 8px 12px;
+  }
+  .capture-home-modes .arcade-mode strong {
+    font-size: 24px;
+  }
+  .capture-home-modes .arcade-mode small {
+    font-size: 12px;
+  }
+  .capture-home-title h1 {
+    font-size: 52px;
+  }
+  .capture-home-title p {
+    font-size: 12px;
+  }
+  .capture-topbar {
+    margin-bottom: 8px;
+  }
+  .capture-online-round {
+    margin-bottom: 6px;
+    gap: 4px 12px;
+  }
+  .capture-player {
+    padding: 6px 8px;
+  }
+  .capture-player-numbers {
+    margin-top: 2px;
+  }
+  .capture-player-numbers b {
+    font-size: 17px;
+  }
+  .capture-player-detail {
+    margin-top: 0;
+  }
+  .capture-turn-banner {
+    margin: 6px 0 2px;
+    font-size: 12px;
+  }
+  .capture-online-request {
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    gap: 4px 8px;
+    font-size: 12px;
+  }
+  .capture-online-request .button-row {
+    gap: 6px;
+  }
+  .capture-online-request button {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+}
+@media (max-height: 500px) and (min-width: 560px) {
+  .capture-home {
+    max-width: 960px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas: "top modes" "title modes" "links modes" "credit modes";
+    align-content: center;
+    column-gap: 28px;
+  }
+  .capture-home-top {
+    grid-area: top;
+  }
+  .capture-home-title {
+    grid-area: title;
+  }
+  .capture-home-modes {
+    grid-area: modes;
+  }
+  .capture-home > .game-links {
+    grid-area: links;
+  }
+  .capture-home > .menu-credit {
+    grid-area: credit;
+  }
+  .capture-playing {
+    max-width: 1120px;
+    padding: 8px 14px 12px;
+  }
+  .capture-play-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: 16px;
   }
-  .capture-preview {
-    width: 120px;
+  .capture-arena {
+    display: contents;
+  }
+  .capture-board-scroll {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    padding-bottom: 48px;
+  }
+  .capture-scoreboard {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .capture-turn-banner {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+  }
+  .capture-board-caption {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: end;
+    z-index: 1;
+    background: var(--canvas);
+  }
+  .capture-actions h2,
+  .capture-actions p {
+    display: none;
+  }
+  .capture-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 8px;
+    gap: 8px;
+  }
+  .capture-actions > button {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+  .capture-actions > button:only-of-type {
+    grid-column: 1 / -1;
+  }
+  .capture-bank-hint {
+    display: none;
+  }
+  .capture-sidebar {
+    grid-column: 2;
+    grid-row: 3;
+    padding: 0;
+  }
+  .capture-last-turn,
+  .capture-save-note {
+    display: none;
+  }
+  .capture-scoreboard {
+    gap: 8px;
+  }
+  .capture-player-name strong {
+    font-size: 14px;
+  }
+  .capture-player-numbers {
+    font-size: 11px;
+  }
+  .capture-online-request {
+    flex-wrap: nowrap;
+  }
+  .capture-online-request .button-row {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
   }
 }

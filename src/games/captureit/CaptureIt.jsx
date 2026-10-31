@@ -8,7 +8,7 @@ import { readTabState, writeTabState } from "../../shared/navigation.js";
 import { queueEvent } from "../../shared/activity.js";
 import { playSound, resultSound } from "../../shared/audio.js";
 import { gameHref, gamePath } from "../../platform/routing.js";
-import { createGame, legalMoves, canExchange } from "./engine.js";
+import { legalMoves, canExchange } from "./engine.js";
 import {
   createSession,
   playSession,
@@ -22,7 +22,6 @@ import "./captureit.css";
 
 const SAVE_KEY = "captureit:session:v1";
 const cap = (color) => (color === "white" ? "White" : "Black");
-const previewGame = createGame();
 
 function Rules({ onClose }) {
   const [page, setPage] = useState(0);
@@ -410,9 +409,6 @@ export default function CaptureIt() {
             </h1>
             <p>Surround your opponent. Shrink the board.</p>
           </div>
-          <div className="capture-preview">
-            <CaptureBoard game={previewGame} preview />
-          </div>
           <nav className="capture-home-modes" aria-label="CaptureIt game modes">
             <button
               className="arcade-mode daily-mode"
@@ -514,6 +510,15 @@ export default function CaptureIt() {
             <button onClick={() => setDialog("resign")}>Resign</button>
           )}
           <button onClick={home}>Save & go home</button>
+          <section className="capture-menu-details">
+            <h3>Last turn</h3>
+            <p>{session.notice}</p>
+            <p className="muted">
+              {saved
+                ? "Saved on this device."
+                : "This browser couldn’t save your game. Keep this page open to continue."}
+            </p>
+          </section>
           <GameLinks current="captureit" />
         </Dialog>
       )}

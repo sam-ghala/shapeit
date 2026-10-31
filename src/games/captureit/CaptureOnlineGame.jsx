@@ -166,7 +166,9 @@ export function CaptureOnlineGame({
   );
 
   return (
-    <main className="capture-app capture-online-app">
+    <main
+      className={`capture-app capture-online-app ${["playing", "finished"].includes(room?.phase) ? "capture-playing" : ""}`}
+    >
       {header}
       {error && !overlay && (
         <div className="error" role="alert">
@@ -448,6 +450,13 @@ export function CaptureOnlineGame({
           )}
           <button onClick={onHome}>Home · keep room</button>
           <button onClick={() => setOverlay("leave")}>Leave room</button>
+          <section className="capture-menu-details">
+            <h3>Last turn</h3>
+            <p>{describeAction(game.lastAction)}</p>
+            <p className="muted">
+              Rejoin this room from this browser if you disconnect.
+            </p>
+          </section>
         </Dialog>
       )}
       {overlay === "resign" && (
