@@ -2,7 +2,7 @@ import "./shapeit.css";
 import { useProfile } from "../../shared/useProfile.js";
 import { GameLinks } from "../../shared/components/GameLinks.jsx";
 import { restoreNavigation, writeTabState } from "./game/navigation.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mobilePlayer } from "../../shared/device.js";
 import { dailyDate, buildPieces } from "./game/engine.js";
 import {
@@ -32,6 +32,7 @@ export default function ShapeIt() {
       phone,
     ),
   );
+  const adminTaps = useRef({ count: 0, last: 0 });
   const [screen, setScreen] = useState(initial.screen);
   const [profile, setProfile] = useProfile();
   const needsMultiplayerName = screen === "duel" && !profile.name.trim();
@@ -212,7 +213,25 @@ export default function ShapeIt() {
       <div className="menu-install">
         <InstallButton />
       </div>
-      <footer className="menu-credit">Robin & Sam</footer>
+      <footer className="menu-credit">
+        <button
+          type="button"
+          className="shapeit-admin-entry"
+          aria-label="Robin & Sam. Tap five times for admin access."
+          onClick={() => {
+            const now = Date.now();
+            const taps = adminTaps.current;
+            taps.count = now - taps.last > 2000 ? 1 : taps.count + 1;
+            taps.last = now;
+            if (taps.count >= 5) {
+              taps.count = 0;
+              setScreen("admin");
+            }
+          }}
+        >
+          Robin & Sam
+        </button>
+      </footer>
       {(profileOpen || needsMultiplayerName) && (
         <Dialog
           title="Your name"

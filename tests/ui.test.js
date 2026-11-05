@@ -1550,3 +1550,19 @@ test("multiplayer switches only absorbed shots to black, including repeated shot
     act(() => rendered.unmount());
   }
 });
+
+test("menu credit opens admin login only after five taps", async () => {
+  entries.clear();
+  globalThis.location = { pathname: "/", search: "" };
+  const App = await component("src/games/shapeit/ShapeIt.jsx", "default");
+  const view = mount(App, {});
+  try {
+    for (let i = 0; i < 4; i++)
+      act(() => button(view, "Robin & Sam").props.onClick());
+    assert.ok(button(view, "△Train mode▶"));
+    act(() => button(view, "Robin & Sam").props.onClick());
+    assert.equal(view.root.findAllByProps({ type: "password" }).length, 1);
+  } finally {
+    act(() => view.unmount());
+  }
+});

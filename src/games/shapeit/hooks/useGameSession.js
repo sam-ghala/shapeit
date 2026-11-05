@@ -23,8 +23,15 @@ export function useGameSession(config, profile) {
   const [storageError, setStorageError] = useState(false);
   const { cols, rows } = SIZES[game.size];
   const pieces = useMemo(
-    () => buildPieces(game.seed, game.size, game.extras),
-    [game.seed, game.size, game.extras],
+    () =>
+      buildPieces(
+        game.seed,
+        game.size,
+        game.extras,
+        null,
+        game.shapeSet !== "diagonal",
+      ),
+    [game.seed, game.size, game.extras, game.shapeSet],
   );
   const puzzle = useMemo(
     () => generatePuzzle(game.seed, pieces, cols, rows),

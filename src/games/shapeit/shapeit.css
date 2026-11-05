@@ -1932,3 +1932,19 @@ html {
   background: #e4e7e2;
   color: #536052;
 }
+
+.shapeit-admin-entry {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  touch-action: manipulation;
+}
+.shapeit-admin-entry:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}

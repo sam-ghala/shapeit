@@ -180,7 +180,12 @@ test("scoring examples and time penalties stay stable", () => {
 });
 test("published daily generation fingerprint stays stable", () => {
   const seed = "v2:2026-10-28:compact",
-    p = generatePuzzle(seed, buildPieces(seed, "compact"), 7, 5);
+    p = generatePuzzle(
+      seed,
+      buildPieces(seed, "compact", false, null, true),
+      7,
+      5,
+    );
   const hash = createHash("sha256").update(JSON.stringify(p)).digest("hex");
   assert.equal(
     hash,
@@ -213,5 +218,16 @@ test("extra pieces can be enabled independently without changing the normal piec
       ),
       null,
     );
+  }
+});
+
+test("current shape selection always gives reflective pieces a diagonal", () => {
+  for (const size of ["compact", "classic"]) {
+    for (let i = 0; i < 100; i++) {
+      for (const piece of buildPieces(`diagonal:${i}`, size)) {
+        assert.notEqual(piece.key, "rectangle");
+        assert.ok(piece.cells.some(([, , type]) => !type.endsWith("f")));
+      }
+    }
   }
 });

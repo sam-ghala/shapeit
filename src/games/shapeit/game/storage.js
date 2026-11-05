@@ -24,6 +24,7 @@ export function createSession({
   const { cols, rows } = SIZES[size];
   return {
     version: ENGINE_VERSION,
+    shapeSet: "diagonal",
     id: crypto.randomUUID(),
     mode,
     size,

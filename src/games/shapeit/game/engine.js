@@ -51,6 +51,12 @@ export const SHAPES = [
       [0, 2, "\\b"],
     ],
   },
+  { key: "pyramid", name: "Large pyramid", cells: DESKTOP_PIECES[0].cells },
+];
+export const COMPACT_SHAPES = SHAPES.filter((s) => s.key !== "pyramid");
+// Preserve the exact shape order for sessions saved before rectangle removal.
+const LEGACY_COMPACT_SHAPES = [
+  ...COMPACT_SHAPES,
   {
     key: "rectangle",
     name: "Rectangle",
@@ -59,9 +65,7 @@ export const SHAPES = [
       [0, 1, "/f"],
     ],
   },
-  { key: "pyramid", name: "Large pyramid", cells: DESKTOP_PIECES[0].cells },
 ];
-export const COMPACT_SHAPES = SHAPES.filter((s) => s.key !== "pyramid");
 export const EXTRA_PIECES = [
   {
     id: "transparent",
@@ -281,6 +285,7 @@ export function buildPieces(
   size = "compact",
   extras = false,
   allowed = null,
+  legacyRectangle = false,
 ) {
   const rng = mulberry32(hashSeed(`${seed}:pieces`));
   let pieces;
@@ -289,7 +294,9 @@ export function buildPieces(
   else {
     const bank = allowed
       ? SHAPES.filter((s) => allowed.includes(s.key))
-      : COMPACT_SHAPES;
+      : legacyRectangle
+        ? LEGACY_COMPACT_SHAPES
+        : COMPACT_SHAPES;
     const count = size === "classic" ? 5 : 4;
     if (bank.length < count)
       throw new Error(`Choose at least ${count} shapes.`);

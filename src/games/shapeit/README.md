@@ -15,3 +15,7 @@ Generic controls, audio, profile, base styles and activity queue live in `src/sh
 Run `npm test` and `node tests/http.integration.mjs` against the local Worker. The root `AGENTS.md` documents the shared visual language and game isolation contract. Do not import PushIt or ChessIt implementation.
 
 Extra pieces each add up to 500 bonus points (score version 3). Existing personal records are recalculated from their stored time, laser count and extras. Absorbed laser feedback automatically selects the black pencil. Transparent diamonds retain their original behavior: no extra hit indicator and no automatic switch to their pencil. On phones and coarse-pointer devices, laser targets are separated from border drawing targets by an empty gap; desktop board geometry is unchanged. Completed daily menu buttons use a muted neutral background and remain accessible for review.
+
+Tap the “Robin & Sam” menu credit five times (at most two seconds between taps) to open the existing admin login inside the app. This shortcut does not change admin authentication.
+
+New puzzles exclude the rectangle. New solo sessions store `shapeSet: "diagonal"`; sessions without that marker retain the original shape selection and deterministic board. Storage keys and engine version remain unchanged. Multiplayer stores its selected pieces, so existing rounds retain their shapes.
