@@ -17,7 +17,7 @@ export default {
       return json({ error: "Origin not allowed." }, 403);
     if (url.pathname.startsWith("/api/admin/")) {
       // Temporary test access requested by the owner; a configured secret takes precedence.
-      const adminKey = env.ADMIN_KEY || "Admin";
+      const adminKey = env.ADMIN_KEY || "234";
       const hash = async (s) =>
         new Uint8Array(
           await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)),

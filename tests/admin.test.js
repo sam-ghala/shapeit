@@ -19,10 +19,11 @@ async function access(key, secret) {
 }
 
 test("temporary admin key works only when no server secret is configured", async () => {
-  assert.equal((await access("Admin")).status, 200);
+  assert.equal((await access("234")).status, 200);
+  assert.equal((await access("Admin")).status, 401);
   assert.equal((await access()).status, 401);
   assert.equal((await access("wrong")).status, 401);
-  assert.equal((await access("Admin", "private-test-secret")).status, 401);
+  assert.equal((await access("234", "private-test-secret")).status, 401);
   assert.equal(
     (await access("private-test-secret", "private-test-secret")).status,
     200,
